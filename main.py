@@ -55,7 +55,7 @@ if "client" not in st.session_state:
         st.error("API Key missing! Please add GROQ_API_KEY to your Streamlit Secrets.")
         st.stop()
 
-# --- 5. INITIALIZE STATE VARIABLE TRACKERS ---
+# --- 5. INITIALIZE STATE TRACKERS ---
 if "messages" not in st.session_state:
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     system_instruction = (
@@ -74,11 +74,12 @@ if "messages" not in st.session_state:
 # --- 6. HIGH-SPEED ACCESSIBILITY MIC COMPONENT ---
 st.markdown("### 🎙️ Voice Input Accessibility")
 
-# Catch input back from the JavaScript microphone component
+# Catch input back from the JavaScript microphone component using Streamlit's official query param handler
 incoming_speech = st.query_params.get("speech_result", "")
 
+# Fixed the TypeError: removed invalid parameters from components.html
 components.html(
-    f"""
+    """
     <div id="mic-box" style="
         text-align: center; 
         font-family: sans-serif; 
@@ -108,57 +109,53 @@ components.html(
     </div>
 
     <script>
-        if (window.frameElement) {{
-            window.frameElement.setAttribute('allow', 'microphone');
-        }}
-
         const btn = document.getElementById('speak-btn');
         const status = document.getElementById('mic-status');
         
         const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
         
-        if (SpeechRecognition) {{
+        if (SpeechRecognition) {
             const recognition = new SpeechRecognition();
             recognition.continuous = false;
-            recognition.lang = 'en-US'; // Change language default context to English base
+            recognition.lang = 'en-US'; 
 
-            btn.addEventListener('click', () => {{
-                try {{
+            btn.addEventListener('click', () => {
+                try {
                     recognition.start();
-                }} catch(e) {{
-                    status.innerText = "Mic already active or error occurred.";
-                }}
-            }});
+                } catch(e) {
+                    status.innerText = "Mic already active.";
+                }
+            });
 
-            recognition.onstart = () => {{
+            recognition.onstart = () => {
                 btn.style.backgroundColor = '#d32f2f';
                 btn.innerText = "🛑 Listening...";
                 status.innerText = "Speak clearly into your microphone...";
-            }};
+            };
 
-            recognition.onresult = (event) => {{
+            recognition.onresult = (event) => {
                 const transcript = event.results[0][0].transcript;
-                status.innerText = "Captured! Sending text...";
+                status.innerText = "Captured! Sending to chat...";
                 
-                // Immediately route text data parameter into URL parameter structure seamlessly
-                const url = new URL(window.location.href);
+                // Instantly communicate back to parent window context without frame blockages
+                const url = new URL(window.parent.location.href);
                 url.searchParams.set("speech_result", transcript);
                 window.parent.location.href = url.toString();
-            }};
+            };
 
-            recognition.onerror = (e) => {{
+            recognition.onerror = (e) => {
                 btn.style.backgroundColor = '#2e7d32';
                 btn.innerText = "🎙️ Tap to Speak";
-                status.innerText = "Error: Click to try again.";
-            }};
+                status.innerText = "Error capturing audio. Try again.";
+            };
 
-            recognition.onend = () => {{
+            recognition.onend = () => {
                 btn.style.backgroundColor = '#2e7d32';
                 btn.innerText = "🎙️ Tap to Speak";
-            }};
-        }} else {{
-            status.innerText = "Speech input not supported on this browser engine.";
-        }}
+            };
+        } else {
+            status.innerText = "Speech input not supported on this device window.";
+        }
     </script>
     """,
     height=115,
@@ -173,11 +170,10 @@ for message in st.session_state.messages:
 # --- 8. PROCESSING LOGIC ENGINE ---
 prompt = None
 
-# Prioritize rapid mic data parameter payload if populated
 if incoming_speech:
     prompt = incoming_speech
-    st.query_params.clear() # Wipe parameter cleanly
-elif not incoming_speech:
+    st.query_params.clear()  # Wipes parameter cleanly so it doesn't loop forever
+else:
     prompt = st.chat_input("Ask me about health, wellness, or anything else...")
 
 if prompt:
