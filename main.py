@@ -33,11 +33,6 @@ st.markdown("""
     </script>
 """, unsafe_allow_html=True)
 
-# --- YOUR VERA CODE STARTS HERE ---
-# Everything else for Vera goes below this line
-st.title("Hello! I am Vera.")
-st.write("How can I help you with your health today?")
-
 # Example of where your existing logic would continue:
 # if st.button("Check status"):
 #    st.write("Vera is online!")
