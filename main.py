@@ -6,20 +6,16 @@ import streamlit.components.v1 as components
 # --- 1. CONFIGURATION ---
 st.set_page_config(page_title="Vera: Personal AI Health Companion", page_icon="⚕️", layout="wide")
 
-# --- 2. JAVASCRIPT ENGINE (The Voice) ---
-# This is a robust bridge. It will NOT crash your app.
+# --- 2. JAVASCRIPT ENGINE (TTS Bridge) ---
+# This listens for a 'speak' message and triggers browser audio
 components.html("""
     <script>
         function speakVera(text) {
-            window.speechSynthesis.cancel(); // Clear any existing audio
+            window.speechSynthesis.cancel();
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = 'en-US';
-            utterance.pitch = 1.0;
-            utterance.rate = 1.0;
-            utterance.volume = 1.0;
             window.speechSynthesis.speak(utterance);
         }
-        // Listen for message from Python to speak
         window.addEventListener('message', (event) => {
             if (event.data.type === 'speak') {
                 speakVera(event.data.text);
@@ -28,7 +24,7 @@ components.html("""
     </script>
 """, height=0)
 
-# --- 3. SYSTEM INITIALIZATION ---
+# --- 3. INITIALIZATION ---
 if "client" not in st.session_state:
     st.session_state.client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
@@ -45,17 +41,26 @@ def get_system_prompt():
 if "messages" not in st.session_state:
     st.session_state.messages = [{"role": "system", "content": get_system_prompt()}]
 
-# --- 4. UI COMPONENTS ---
+# --- 4. LIVE CLOCK COMPONENT ---
+components.html("""
+    <div id="clock" style="position:fixed; top:10px; right:20px; font-family:sans-serif; font-size:16px; color:#2e7d32; font-weight:bold; background:white; padding:5px 12px; border-radius:20px; border:1px solid #2e7d32; z-index:9999;">--:--</div>
+    <script>
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('clock').innerText = now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+        }
+        setInterval(updateClock, 1000); updateClock();
+    </script>
+""", height=40)
+
+# --- 5. UI LAYOUT ---
 st.title("Vera ⚕️ | Personal AI Health Companion")
 
-# Live Clock
-st.sidebar.markdown(f"**Local Time:** {datetime.now().strftime('%H:%M:%S')}")
-
-# --- 5. VOICE INPUT (Native) ---
-audio_value = st.audio_input("🎙️ Record your symptoms or questions")
+# --- 6. VOICE INPUT (Native & Stable) ---
+audio_value = st.audio_input("🎙️ Record your symptoms or question")
 
 if audio_value:
-    with st.spinner("Analyzing..."):
+    with st.spinner("Analyzing audio..."):
         trans = st.session_state.client.audio.transcriptions.create(
             file=("audio.wav", audio_value.getvalue()), model="whisper-large-v3"
         ).text
@@ -63,40 +68,48 @@ if audio_value:
 
 if "pending_text" in st.session_state:
     st.info(f"Captured: {st.session_state.pending_text}")
-    if st.button("✅ Consult Vera"):
+    if st.button("✅ Send to Vera"):
         st.session_state.messages.append({"role": "user", "content": st.session_state.pending_text})
         del st.session_state.pending_text
         st.rerun()
 
-# --- 6. CHAT DISPLAY ---
+# --- 7. CHAT DISPLAY ---
 for msg in st.session_state.messages:
     if msg["role"] != "system":
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-# --- 7. PROCESSING & TTS TRIGGER ---
-prompt = st.chat_input("Type your question here...")
+# --- 8. PROCESSING ENGINE ---
+prompt = st.chat_input("Or type here...")
 if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
     st.rerun()
 
-if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
+if len(st.session_state.messages) > 1 and st.session_state.messages[-1]["role"] == "user":
     with st.chat_message("assistant"):
         st.session_state.messages[0]["content"] = get_system_prompt()
         stream = st.session_state.client.chat.completions.create(
             messages=st.session_state.messages, model="llama-3.1-8b-instant", stream=True
         )
-        full_res = st.write_stream(stream)
+        
+        full_res = ""
+        placeholder = st.empty()
+        
+        for chunk in stream:
+            if chunk.choices[0].delta.content:
+                full_res += chunk.choices[0].delta.content
+                placeholder.markdown(full_res)
+        
         st.session_state.messages.append({"role": "assistant", "content": full_res})
         
-        # Trigger Speech via JS
+        # Trigger Speech
+        sanitized = full_res.replace('"', '\\"').replace('\n', ' ')
         components.html(f"""
             <script>
-                window.parent.postMessage({{type: 'speak', text: "{full_res.replace('"', '')}"}}, '*');
+                window.parent.postMessage({{type: 'speak', text: "{sanitized}"}}, '*');
             </script>
         """, height=0)
     st.rerun()
 
 st.markdown("---")
 st.caption("Powered by Groq | Vera AI Engine")
-        
