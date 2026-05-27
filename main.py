@@ -3,7 +3,7 @@ from groq import Groq
 from datetime import datetime
 import streamlit.components.v1 as components
 
-# --- 1. PAGE CONFIGURATION (MUST BE FIRST) ---
+# --- 1. PAGE CONFIGURATION ---
 st.set_page_config(page_title="Vera: Your Personal Health Assistant ⚕️", page_icon="⚕️")
 
 # --- 2. FIXED LIVE CLOCK COMPONENT ---
@@ -65,26 +65,104 @@ if "messages" not in st.session_state:
         "and capable of understanding any language perfectly (including Tagalog, Ilocano, Pangasinense, etc.). "
         "Only change your output language if the user explicitly asks you to change it, or if they talk to you directly "
         "in a non-English language. Otherwise, keep your responses in clean, supportive English. "
-        "Keep your answers brief, friendly, and concise (1-3 sentences max) so it is fast to process and speak aloud."
+        "Keep your answers brief, friendly, and concise (1-3 sentences max)."
     )
     st.session_state.messages = [
         {"role": "system", "content": system_instruction}
     ]
 
-if "voice_mode" not in st.session_state:
-    st.session_state.voice_mode = False
+# --- 6. HIGH-SPEED ACCESSIBILITY MIC COMPONENT ---
+st.markdown("### 🎙️ Voice Input Accessibility")
 
-if "last_response" not in st.session_state:
-    st.session_state.last_response = None
+# Catch input back from the JavaScript microphone component
+incoming_speech = st.query_params.get("speech_result", "")
 
-# --- 6. ROUTE INCOMING VOICE PARAMS ---
-voice_prompt = st.query_params.get("voice_input", None)
-exit_signal = st.query_params.get("exit_voice", None)
+components.html(
+    f"""
+    <div id="mic-box" style="
+        text-align: center; 
+        font-family: sans-serif; 
+        background: #1e293b; 
+        padding: 15px; 
+        border-radius: 12px; 
+        border: 1px solid #334155;
+    ">
+        <button id="speak-btn" style="
+            background-color: #2e7d32; 
+            color: white; 
+            border: none; 
+            padding: 14px 28px; 
+            font-size: 18px; 
+            font-weight: bold; 
+            border-radius: 30px; 
+            cursor: pointer; 
+            width: 80%;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            transition: all 0.2s ease;
+        ">
+            🎙️ Tap to Speak
+        </button>
+        <p id="mic-status" style="color: #94a3b8; font-size: 14px; margin-top: 10px; font-weight: 500;">
+            Ready to listen
+        </p>
+    </div>
 
-if exit_signal:
-    st.session_state.voice_mode = False
-    st.query_params.clear()
-    st.rerun()
+    <script>
+        if (window.frameElement) {{
+            window.frameElement.setAttribute('allow', 'microphone');
+        }}
+
+        const btn = document.getElementById('speak-btn');
+        const status = document.getElementById('mic-status');
+        
+        const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
+        
+        if (SpeechRecognition) {{
+            const recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.lang = 'en-US'; // Change language default context to English base
+
+            btn.addEventListener('click', () => {{
+                try {{
+                    recognition.start();
+                }} catch(e) {{
+                    status.innerText = "Mic already active or error occurred.";
+                }}
+            }});
+
+            recognition.onstart = () => {{
+                btn.style.backgroundColor = '#d32f2f';
+                btn.innerText = "🛑 Listening...";
+                status.innerText = "Speak clearly into your microphone...";
+            }};
+
+            recognition.onresult = (event) => {{
+                const transcript = event.results[0][0].transcript;
+                status.innerText = "Captured! Sending text...";
+                
+                // Immediately route text data parameter into URL parameter structure seamlessly
+                const url = new URL(window.location.href);
+                url.searchParams.set("speech_result", transcript);
+                window.parent.location.href = url.toString();
+            }};
+
+            recognition.onerror = (e) => {{
+                btn.style.backgroundColor = '#2e7d32';
+                btn.innerText = "🎙️ Tap to Speak";
+                status.innerText = "Error: Click to try again.";
+            }};
+
+            recognition.onend = () => {{
+                btn.style.backgroundColor = '#2e7d32';
+                btn.innerText = "🎙️ Tap to Speak";
+            }};
+        }} else {{
+            status.innerText = "Speech input not supported on this browser engine.";
+        }}
+    </script>
+    """,
+    height=115,
+)
 
 # --- 7. DISPLAY CHAT MESSAGES CONTENT ---
 for message in st.session_state.messages:
@@ -92,130 +170,14 @@ for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-# --- 8. SMART VOICE ENGINE CONTROLLER ---
-if st.session_state.voice_mode:
-    st.markdown("### 🟢 Continuous Voice Mode Active")
-    
-    if st.button("❌ Exit Voice Mode & Return to Chat"):
-        st.session_state.voice_mode = False
-        st.rerun()
-
-    should_speak = "true" if st.session_state.last_response else "false"
-    speak_text = st.session_state.last_response.replace('"', '&quot;').replace('\n', ' ') if st.session_state.last_response else ""
-
-    components.html(
-        f"""
-        <div id="voice-container" style="
-            text-align: center; 
-            font-family: sans-serif; 
-            background: #e8f5e9; 
-            padding: 20px; 
-            border-radius: 15px; 
-            border: 2px dashed #2e7d32;
-            cursor: pointer;
-        ">
-            <h4 style="margin: 0 0 10px 0; color: #2e7d32;">🎙️ Continuous Conversation Active</h4>
-            <div id="voice-status" style="font-size: 15px; font-weight: bold; color: #333;">
-                Initializing Voice Engine...
-            </div>
-            <p style="font-size: 12px; color: #666; margin: 10px 0 0 0;">(If listening stops, simply tap inside this green box to reply)</p>
-        </div>
-
-        <script>
-            if (window.frameElement) {{
-                window.frameElement.setAttribute('allow', 'microphone');
-            }}
-
-            const container = document.getElementById('voice-container');
-            const statusText = document.getElementById('voice-status');
-            
-            const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
-            let recognition = null;
-            
-            if (SpeechRecognition) {{
-                recognition = new SpeechRecognition();
-                recognition.continuous = false;
-                recognition.lang = 'en-US'; 
-
-                recognition.onstart = () => {{
-                    container.style.background = '#ffebee';
-                    container.style.borderColor = '#d32f2f';
-                    statusText.innerHTML = '<span style="color: #d32f2f;">🔴 Vera is listening... Speak now!</span>';
-                }};
-                
-                recognition.onresult = (event) => {{
-                    const transcript = event.results[0][0].transcript;
-                    statusText.innerText = "Processing what you said...";
-                    
-                    const currentUrl = new URL(window.location.href);
-                    currentUrl.searchParams.set("voice_input", transcript);
-                    window.parent.location.href = currentUrl.toString();
-                }};
-                
-                recognition.onerror = (event) => {{
-                    container.style.background = '#e8f5e9';
-                    container.style.borderColor = '#2e7d32';
-                    statusText.innerHTML = '✨ Ready! Tap anywhere inside this box to talk.';
-                }};
-                
-                recognition.onend = () => {{
-                    if (statusText.innerText.indexOf("Processing") === -1) {{
-                        container.style.background = '#e8f5e9';
-                        container.style.borderColor = '#2e7d32';
-                        statusText.innerHTML = '✨ Ready! Tap anywhere inside this box to talk.';
-                    }}
-                }};
-                
-                container.addEventListener('click', () => {{
-                    try {{ recognition.start(); }} catch(e) {{}}
-                }});
-            }}
-
-            const shouldSpeak = {should_speak};
-            const textToSpeak = "{speak_text}";
-
-            window.addEventListener('DOMContentLoaded', () => {{
-                if (shouldSpeak && 'speechSynthesis' in window) {{
-                    window.speechSynthesis.cancel();
-                    const msg = new SpeechSynthesisUtterance(textToSpeak);
-                    
-                    msg.rate = 1.1; // Slightly speed up speech delivery
-                    msg.pitch = 1.1;
-                    
-                    msg.onend = () => {{
-                        if (recognition) {{
-                            try {{ recognition.start(); }} catch(e) {{}}
-                        }}
-                    }};
-                    
-                    statusText.innerHTML = '🔊 <strong>Vera is speaking...</strong>';
-                    window.speechSynthesis.speak(msg);
-                }} else if (recognition) {{
-                    setTimeout(() => {{
-                        try {{ recognition.start(); }} catch(e) {{}}
-                    }}, 300);
-                }}
-            }});
-        </script>
-        """,
-        height=130,
-    )
-    # Clear the response flag so it doesn't repeat on a standard refresh
-    st.session_state.last_response = None
-
-else:
-    st.markdown("---")
-    if st.button("🎙️ Enter Continuous Voice Mode"):
-        st.session_state.voice_mode = True
-        st.rerun()
-
-# --- 9. STREAMING ENGINE PIPELINE CONTEXT ---
+# --- 8. PROCESSING LOGIC ENGINE ---
 prompt = None
 
-if voice_prompt:
-    prompt = voice_prompt
-    st.query_params.clear()
-elif not st.session_state.voice_mode:
+# Prioritize rapid mic data parameter payload if populated
+if incoming_speech:
+    prompt = incoming_speech
+    st.query_params.clear() # Wipe parameter cleanly
+elif not incoming_speech:
     prompt = st.chat_input("Ask me about health, wellness, or anything else...")
 
 if prompt:
@@ -227,36 +189,29 @@ if prompt:
         try:
             valid_messages = [msg for msg in st.session_state.messages if isinstance(msg.get("content"), str)]
             
-            # Request streaming text data directly from Groq
             stream = st.session_state.client.chat.completions.create(
                 messages=valid_messages,
                 model="llama-3.1-8b-instant",
                 stream=True 
             )
             
-            # Setup a placeholder box so text dynamically renders in real-time
             placeholder = st.empty()
             full_response = ""
             
             for chunk in stream:
                 if chunk.choices[0].delta.content is not None:
                     full_response += chunk.choices[0].delta.content
-                    placeholder.markdown(full_response) # Streams instantly to the screen!
+                    placeholder.markdown(full_response)
             
             if full_response:
                 st.session_state.messages.append({"role": "assistant", "content": full_response})
-                st.session_state.last_response = full_response
-                
-                # If using your voice, instantly rerun once to push the complete sentence to the speech engine
-                if st.session_state.voice_mode:
-                    st.rerun()
+                st.rerun()
                 
         except Exception as e:
             st.error(f"Error: {e}")
             if len(st.session_state.messages) > 1:
                 st.session_state.messages.pop()
 
-# --- 10. FOOTER ---
+# --- 9. FOOTER ---
 st.markdown("---")
 st.caption("Powered by Groq | Developed by OmniSync")
-    
