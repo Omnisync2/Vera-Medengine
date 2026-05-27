@@ -1,6 +1,46 @@
 import streamlit as st
 from groq import Groq
 from datetime import datetime
+import streamlit as st
+
+# --- LIVE CLOCK COMPONENT ---
+st.markdown("""
+    <div id="clock" style="
+        position: fixed; 
+        top: 15px; 
+        right: 20px; 
+        font-family: sans-serif; 
+        font-size: 16px; 
+        color: #333; 
+        font-weight: bold; 
+        background: rgba(255, 255, 255, 0.9); 
+        padding: 5px 12px; 
+        border-radius: 20px; 
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        z-index: 9999;">
+        --:--
+    </div>
+    <script>
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('clock').innerText = now.toLocaleTimeString([], { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            });
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+    </script>
+""", unsafe_allow_html=True)
+
+# --- YOUR VERA CODE STARTS HERE ---
+# Everything else for Vera goes below this line
+st.title("Hello! I am Vera.")
+st.write("How can I help you with your health today?")
+
+# Example of where your existing logic would continue:
+# if st.button("Check status"):
+#    st.write("Vera is online!")
 
 # Configure the page
 st.set_page_config(page_title="Vera: Your Personal Health Assistant", page_icon="🩺")
