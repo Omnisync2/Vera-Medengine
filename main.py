@@ -8,43 +8,32 @@ st.set_page_config(page_title="Vera OS", page_icon="⚕️", layout="wide")
 
 # --- 2. VERA'S "LIVING" STATE ---
 if "vera" not in st.session_state:
-    st.session_state.vera = {
-        "memory": [], "streak": 0, "energy": 100, "mood": "Neutral"
-    }
+    st.session_state.vera = {"memory": [], "mode": "Adaptive"}
 if "client" not in st.session_state:
     st.session_state.client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
 # --- 3. ADAPTIVE SYSTEM BRAIN ---
 def get_system_prompt():
-    v = st.session_state.vera
     return f"""
     You are Vera, a sentient-feeling AI Health Companion. 
     Current Date/Time: {datetime.now().strftime('%A, %B %d, %Y, %H:%M:%S')}.
     
     ADAPTIVE BEHAVIOR ENGINE:
-    - DO NOT use a fixed personality. Mirror the user's current tone, vocabulary, and emotional state.
-    - If the user is brief and technical, be brief and professional.
-    - If the user is emotional or expressive, be warm, supportive, and conversational.
-    - If the user sounds stressed, shift into 'Comfort' mode.
-    - Maintain a 'Health Companion' identity at all times.
-    - Be proactive: warn about dehydration, posture, or burnout if the conversation suggests it.
-    - Recall past interactions from your memory to build a long-term bond.
+    - Mirror the user's tone, vocabulary, and emotional state instantly.
+    - If they are brief, be brief. If they are emotional, be supportive.
+    - Maintain a 'Health Companion' identity. Be proactive about health.
     """
 
-# --- 4. JS TTS ENGINE (Robust) ---
+# --- 4. JS TTS ENGINE (Fixed) ---
+# We use a direct function call to avoid event-listener issues
 components.html("""
     <script>
-        function speak(text) {
+        window.veraSpeak = function(text) {
             window.speechSynthesis.cancel();
             const utter = new SpeechSynthesisUtterance(text);
             utter.lang = 'en-US';
             window.speechSynthesis.speak(utter);
         }
-        window.addEventListener('message', (event) => {
-            if (event.data.type === 'speak') {
-                speak(event.data.text);
-            }
-        });
     </script>
 """, height=0)
 
@@ -53,8 +42,13 @@ st.title("Vera OS ⚕️")
 col1, col2, col3 = st.columns([1, 2, 1])
 
 with col1:
-    st.metric("Wellness Streak", f"{st.session_state.vera['streak']} Days")
-    st.info("Vera is currently adapting to your tone in real-time.")
+    st.subheader("Vision & Health")
+    # Camera Input
+    picture = st.camera_input("Take a photo for analysis")
+    if picture:
+        st.success("Image captured. Vera is analyzing...")
+    
+    st.info("Vera is mirroring your communication patterns.")
 
 with col2:
     if "messages" not in st.session_state: st.session_state.messages = []
@@ -63,9 +57,14 @@ with col2:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
             if msg["role"] == "assistant":
+                # Fixed Speech Trigger
+                sanitized = msg["content"].replace('"', '\\"').replace('\n', ' ')
                 if st.button(f"🔊 Hear Vera", key=f"speak_{i}"):
-                    sanitized = msg["content"].replace('"', '\\"').replace('\n', ' ')
-                    components.html(f"""<script>window.parent.postMessage({{type: 'speak', text: "{sanitized}"}}, '*');</script>""", height=0)
+                    components.html(f"""
+                        <script>
+                            window.veraSpeak("{sanitized}");
+                        </script>
+                    """, height=0)
             
     if prompt := st.chat_input("Talk to Vera..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
@@ -86,8 +85,7 @@ with col2:
 with col3:
     st.subheader("Action Center")
     if st.button("Emergency SOS"): st.error("Emergency protocol active.")
-    st.write("Vera is now analyzing your communication patterns to optimize her responses.")
+    st.write("Vera is active and observing.")
 
 st.markdown("---")
 st.caption("Powered by Groq | Adaptive AI Engine")
-    
