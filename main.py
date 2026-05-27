@@ -55,17 +55,17 @@ if "client" not in st.session_state:
         st.error("API Key missing! Please add GROQ_API_KEY to your Streamlit Secrets.")
         st.stop()
 
-# --- 5. INITIALIZE STATE VARIABLE TRACKERS (BALANCED LANGUAGE RULE) ---
+# --- 5. INITIALIZE STATE VARIABLE TRACKERS ---
 if "messages" not in st.session_state:
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     system_instruction = (
         f"You are Vera, a helpful Health Assistant developed by OmniSync. "
         f"The current date and time is {now}. "
-        "LANGUAGE RULE: Speak and respond in English by default. However, you are highly multilingual "
-        "and capable of understanding any language or regional dialect perfectly (including Tagalog, Ilocano, Pangasinense, Spanish, etc.). "
+        "LANGUAGE RULE: Speak and respond in English by default. You are highly multilingual "
+        "and capable of understanding any language perfectly (including Tagalog, Ilocano, Pangasinense, etc.). "
         "Only change your output language if the user explicitly asks you to change it, or if they talk to you directly "
         "in a non-English language. Otherwise, keep your responses in clean, supportive English. "
-        "Keep your answers brief and concise so they are pleasant to listen to when read aloud."
+        "Keep your answers brief, friendly, and concise (1-3 sentences max) so it is fast to process and speak aloud."
     )
     st.session_state.messages = [
         {"role": "system", "content": system_instruction}
@@ -135,7 +135,7 @@ if st.session_state.voice_mode:
             if (SpeechRecognition) {{
                 recognition = new SpeechRecognition();
                 recognition.continuous = false;
-                recognition.lang = 'en-US'; // Default speech interpretation context safely to English
+                recognition.lang = 'en-US'; 
 
                 recognition.onstart = () => {{
                     container.style.background = '#ffebee';
@@ -179,7 +179,7 @@ if st.session_state.voice_mode:
                     window.speechSynthesis.cancel();
                     const msg = new SpeechSynthesisUtterance(textToSpeak);
                     
-                    msg.rate = 1.0;
+                    msg.rate = 1.1; // Slightly speed up speech delivery
                     msg.pitch = 1.1;
                     
                     msg.onend = () => {{
@@ -193,14 +193,14 @@ if st.session_state.voice_mode:
                 }} else if (recognition) {{
                     setTimeout(() => {{
                         try {{ recognition.start(); }} catch(e) {{}}
-                    }}, 500);
+                    }}, 300);
                 }}
             }});
         </script>
         """,
         height=130,
     )
-    # Clear memory quietly without triggering an immediate crash or loop stall
+    # Clear the response flag so it doesn't repeat on a standard refresh
     st.session_state.last_response = None
 
 else:
@@ -227,24 +227,27 @@ if prompt:
         try:
             valid_messages = [msg for msg in st.session_state.messages if isinstance(msg.get("content"), str)]
             
+            # Request streaming text data directly from Groq
             stream = st.session_state.client.chat.completions.create(
                 messages=valid_messages,
                 model="llama-3.1-8b-instant",
                 stream=True 
             )
             
-            def generate_clean_tokens():
-                for chunk in stream:
-                    if chunk.choices[0].delta.content is not None:
-                        yield chunk.choices[0].delta.content
-
-            response = st.write_stream(generate_clean_tokens())
+            # Setup a placeholder box so text dynamically renders in real-time
+            placeholder = st.empty()
+            full_response = ""
             
-            if response:
-                st.session_state.messages.append({"role": "assistant", "content": response})
-                st.session_state.last_response = response
+            for chunk in stream:
+                if chunk.choices[0].delta.content is not None:
+                    full_response += chunk.choices[0].delta.content
+                    placeholder.markdown(full_response) # Streams instantly to the screen!
+            
+            if full_response:
+                st.session_state.messages.append({"role": "assistant", "content": full_response})
+                st.session_state.last_response = full_response
                 
-                # Optimized: If voice mode is active, we reload ONCE so the HTML box speaks it immediately.
+                # If using your voice, instantly rerun once to push the complete sentence to the speech engine
                 if st.session_state.voice_mode:
                     st.rerun()
                 
