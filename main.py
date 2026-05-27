@@ -2,6 +2,7 @@ import streamlit as st
 from groq import Groq
 from datetime import datetime
 
+# Configure the page
 st.set_page_config(page_title="Vera: Your Personal Health Assistant", page_icon="🩺")
 st.title("Vera: Your Personal Health Assistant")
 
@@ -10,14 +11,21 @@ if "client" not in st.session_state:
     try:
         st.session_state.client = Groq(api_key=st.secrets["GROQ_API_KEY"])
     except Exception as e:
-        st.error("API Key missing! Please set it in Streamlit Secrets.")
+        st.error("API Key missing! Please add GROQ_API_KEY to your Streamlit Secrets.")
         st.stop()
 
-# Initialize History
+# Initialize History with Vera's Identity
 if "messages" not in st.session_state:
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # This is the "Origin Story" instruction
+    system_instruction = (
+        f"You are Vera, a helpful Health Assistant. "
+        f"You were created by OmniSync. "
+        f"The current date and time is {now}. "
+        "If asked about your creator, state that you were developed by OmniSync."
+    )
     st.session_state.messages = [
-        {"role": "system", "content": f"You are Vera, a helpful Health Assistant. Today is {now}."}
+        {"role": "system", "content": system_instruction}
     ]
 
 # Display Messages
@@ -36,7 +44,7 @@ if prompt := st.chat_input("Ask me about health, wellness, or anything else...")
     # 2. Generate Response
     with st.chat_message("assistant"):
         try:
-            # We filter the list to ensure all content is a string
+            # Filter the list to ensure only strings are passed
             valid_messages = [msg for msg in st.session_state.messages if isinstance(msg.get("content"), str)]
             
             completion = st.session_state.client.chat.completions.create(
@@ -46,15 +54,14 @@ if prompt := st.chat_input("Ask me about health, wellness, or anything else...")
             )
             response = completion.choices[0].message.content
             
-            # 3. Only save if response is valid
             if response:
                 st.markdown(response)
                 st.session_state.messages.append({"role": "assistant", "content": response})
-            else:
-                st.warning("Vera returned an empty response.")
-                
         except Exception as e:
             st.error(f"Error: {e}")
-            # If it breaks, let's clear the last entry to prevent getting stuck
             if len(st.session_state.messages) > 1:
                 st.session_state.messages.pop()
+
+# Footer Crediting Groq
+st.markdown("---")
+st.caption("Powered by Groq | Developed by OmniSync")
