@@ -2,26 +2,17 @@ import streamlit as st
 from groq import Groq
 from datetime import datetime
 import streamlit.components.v1 as components
+from PIL import Image
+import io
+import base64
 
 # --- 1. CONFIGURATION ---
 st.set_page_config(page_title="Vera OS", page_icon="⚕️", layout="wide")
 
-# --- 2. VERA'S STATE ---
-if "vera" not in st.session_state:
-    st.session_state.vera = {"show_camera": False}
 if "client" not in st.session_state:
     st.session_state.client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-# --- 3. ADAPTIVE SYSTEM BRAIN ---
-def get_system_prompt():
-    return f"""
-    You are Vera, a sentient-feeling AI Health Companion. 
-    Current Date/Time: {datetime.now().strftime('%A, %B %d, %Y, %H:%M:%S')}.
-    Mirror the user's tone, vocabulary, and emotional state instantly. 
-    Maintain a 'Health Companion' identity. Be proactive about health.
-    """
-
-# --- 4. JS AUTO-SPEAK ENGINE ---
+# --- 2. JS ENGINE (Fixed Auto-Speak) ---
 components.html("""
     <script>
         window.veraSpeak = function(text) {
@@ -33,33 +24,43 @@ components.html("""
     </script>
 """, height=0)
 
-# --- 5. UI HUB ---
+# --- 3. VISION HELPER ---
+def encode_image(image_bytes):
+    return base64.b64encode(image_bytes).decode('utf-8')
+
+# --- 4. UI ---
 st.title("Vera OS ⚕️")
-col1, col2, col3 = st.columns([1, 2, 1])
+col1, col2 = st.columns([1, 3])
 
 with col1:
-    st.subheader("Vision & Health")
-    if st.button("📸 Toggle Camera"):
-        st.session_state.vera["show_camera"] = not st.session_state.vera["show_camera"]
+    st.subheader("Vision")
+    if "show_cam" not in st.session_state: st.session_state.show_cam = False
+    if st.button("📸 Toggle Camera"): st.session_state.show_cam = not st.session_state.show_cam
     
-    if st.session_state.vera["show_camera"]:
-        st.camera_input("Analyze Image")
-    
-    st.info("Vera is mirroring your communication patterns.")
+    img_file = None
+    if st.session_state.show_cam:
+        img_file = st.camera_input("Take a photo")
 
 with col2:
     if "messages" not in st.session_state: st.session_state.messages = []
-    
     for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
-            
+        with st.chat_message(msg["role"]): st.markdown(msg["content"])
+
     if prompt := st.chat_input("Talk to Vera..."):
+        content_payload = [{"type": "text", "text": prompt}]
+        
+        # If camera photo exists, attach it to the vision request
+        if img_file:
+            img_bytes = img_file.getvalue()
+            content_payload.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{encode_image(img_bytes)}"}})
+        
         st.session_state.messages.append({"role": "user", "content": prompt})
+        
         with st.chat_message("assistant"):
+            # Use a Vision-capable model
             stream = st.session_state.client.chat.completions.create(
-                messages=[{"role": "system", "content": get_system_prompt()}] + st.session_state.messages,
-                model="llama-3.1-8b-instant", stream=True
+                messages=[{"role": "user", "content": content_payload}],
+                model="llama-3.2-11b-vision-preview", stream=True
             )
             
             full_res = ""
@@ -71,20 +72,8 @@ with col2:
             
             st.session_state.messages.append({"role": "assistant", "content": full_res})
             
-            # AUTO-TRIGGER SPEECH
+            # TRIGGER SPEECH
             sanitized = full_res.replace('"', '\\"').replace('\n', ' ')
-            components.html(f"""
-                <script>
-                    window.veraSpeak("{sanitized}");
-                </script>
-            """, height=0)
+            components.html(f"""<script>window.veraSpeak("{sanitized}");</script>""", height=0)
         st.rerun()
-
-with col3:
-    st.subheader("Action Center")
-    if st.button("Emergency SOS"): st.error("Emergency protocol active.")
-    st.write("Vera is active and observing.")
-
-st.markdown("---")
-st.caption("Powered by Groq | Adaptive AI Engine")
         
