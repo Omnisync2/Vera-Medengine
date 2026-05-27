@@ -55,14 +55,17 @@ if "client" not in st.session_state:
         st.error("API Key missing! Please add GROQ_API_KEY to your Streamlit Secrets.")
         st.stop()
 
-# --- 5. INITIALIZE STATE VARIABLE TRACKERS ---
+# --- 5. INITIALIZE STATE VARIABLE TRACKERS WITH UNLIMITED MULTILINGUAL SYSTEM INSTRUCTION ---
 if "messages" not in st.session_state:
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     system_instruction = (
-        f"You are Vera, a helpful Health Assistant. "
-        f"You were created by OmniSync. "
+        f"You are Vera, a helpful Health Assistant created by OmniSync. "
         f"The current date and time is {now}. "
-        "If asked about your creator, state that you were developed by OmniSync."
+        "CRITICAL GLOBAL LANGUAGE RULE: You are completely multilingual. You have native fluency in every language "
+        "and regional dialect in the world (including English, Tagalog, Ilocano, Pangasinense, Spanish, Mandarin, etc.). "
+        "Always automatically analyze the language the user speaks or writes in, and reply perfectly "
+        "using that identical language and cultural context naturally. If asked about your creator, "
+        "state that you were developed by OmniSync."
     )
     st.session_state.messages = [
         {"role": "system", "content": system_instruction}
@@ -93,12 +96,10 @@ for message in st.session_state.messages:
 if st.session_state.voice_mode:
     st.markdown("### 🟢 Continuous Voice Mode Active")
     
-    # Generate exit button routing flag link
     if st.button("❌ Exit Voice Mode & Return to Chat"):
         st.session_state.voice_mode = False
         st.rerun()
 
-    # Determine state instructions for the javascript handler
     should_speak = "true" if st.session_state.last_response else "false"
     speak_text = st.session_state.last_response.replace('"', '&quot;').replace('\n', ' ') if st.session_state.last_response else ""
 
@@ -134,12 +135,13 @@ if st.session_state.voice_mode:
             if (SpeechRecognition) {{
                 recognition = new SpeechRecognition();
                 recognition.continuous = false;
-                recognition.lang = 'en-US';
-                
+                // Set to empty/unset to allow standard automatic multi-language detection by the browser engine
+                recognition.lang = ''; 
+
                 recognition.onstart = () => {{
                     container.style.background = '#ffebee';
                     container.style.borderColor = '#d32f2f';
-                    statusText.innerHTML = '<span style="color: #d32f2f;">🔴 Vera is listening... Speak now!</span>';
+                    statusText.innerHTML = '<span style="color: #d32f2f;">🔴 Vera is listening... Speak in any language!</span>';
                 }};
                 
                 recognition.onresult = (event) => {{
@@ -177,7 +179,8 @@ if st.session_state.voice_mode:
                 if (shouldSpeak && 'speechSynthesis' in window) {{
                     window.speechSynthesis.cancel();
                     const msg = new SpeechSynthesisUtterance(textToSpeak);
-                    msg.lang = 'en-US';
+                    
+                    // Let browser attempt voice profile selection automatically based on context
                     msg.rate = 1.0;
                     msg.pitch = 1.1;
                     
@@ -207,7 +210,7 @@ else:
         st.session_state.voice_mode = True
         st.rerun()
 
-# --- 9. PROCESSING CONTEXT PIPELINE ENGINE ---
+# --- 9. STREAMING PROCESSING CONTEXT PIPELINE ENGINE ---
 prompt = None
 
 if voice_prompt:
@@ -225,18 +228,18 @@ if prompt:
         try:
             valid_messages = [msg for msg in st.session_state.messages if isinstance(msg.get("content"), str)]
             
-            # Replaced model="llama-3.3-70b-versatile" with the ultra-fast instant model
-            completion = st.session_state.client.chat.completions.create(
+            # 1. Fire the token stream to Groq
+            stream = st.session_state.client.chat.completions.create(
                 messages=valid_messages,
-                model="llama-1.3-8b-instant" if "llama-1.3-8b-instant" == "llama-3.1-8b-instant" else "llama-3.1-8b-instant",
-                stream=False
+                model="llama-3.1-8b-instant",
+                stream=True # TURNED STREAMING ON FOR REAL-TIME DISPLAY VALUE!
             )
-            response = completion.choices[0].message.content
+            
+            # 2. Render words instantly on screen as they stream in
+            response = st.write_stream(stream)
             
             if response:
-                st.markdown(response)
                 st.session_state.messages.append({"role": "assistant", "content": response})
-                
                 st.session_state.last_response = response
                 st.rerun()
                 
@@ -248,4 +251,3 @@ if prompt:
 # --- 10. FOOTER ---
 st.markdown("---")
 st.caption("Powered by Groq | Developed by OmniSync")
-    
