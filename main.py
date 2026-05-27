@@ -2,10 +2,7 @@ import streamlit as st
 from groq import Groq
 import streamlit.components.v1 as components
 from datetime import datetime
-# Added for file processing
-import PyPDF2 
-from PIL import Image
-import pytesseract # Requires Tesseract-OCR installed on your system
+import pypdf # Updated to pypdf
 
 # --- 1. CONFIGURATION ---
 st.set_page_config(page_title="Vera | Personal AI Health Companion", page_icon="⚕️", layout="wide")
@@ -52,28 +49,25 @@ components.html("""
     </script>
 """, height=150)
 
-# --- 4. FILE UPLOADER (New Feature) ---
-uploaded_file = st.sidebar.file_uploader("Upload a document or image for Vera to analyze", type=['txt', 'pdf', 'png', 'jpg', 'jpeg'])
+# --- 4. DOCUMENT UPLOADER ---
+uploaded_file = st.sidebar.file_uploader("Upload a document for Vera", type=['txt', 'pdf'])
 
-def process_file(file):
+def process_document(file):
     if file.type == "application/pdf":
-        reader = PyPDF2.PdfReader(file)
+        reader = pypdf.PdfReader(file)
         return "\n".join([page.extract_text() for page in reader.pages])
-    elif "image" in file.type:
-        # Simple extraction - note: requires pytesseract installed
-        return "Vera is looking at the image: " + file.name 
-    return file.getvalue().decode("utf-8")
+    else:
+        return file.getvalue().decode("utf-8")
 
-# --- 5. UI ---
+# --- 5. UI & CONTEXT ---
 st.title("Vera | Personal AI Health Companion ⚕️")
 
 if "messages" not in st.session_state: st.session_state.messages = []
 
-# If file is uploaded, inject it as context
 if uploaded_file:
-    file_content = process_file(uploaded_file)
-    st.session_state.messages.append({"role": "system", "content": f"User uploaded a file named {uploaded_file.name}. Content: {file_content}"})
-    st.sidebar.success("File analyzed! Ask Vera about it.")
+    file_content = process_document(uploaded_file)
+    st.session_state.messages.append({"role": "system", "content": f"User uploaded a document named {uploaded_file.name}. Content: {file_content}"})
+    st.sidebar.success(f"Analyzed: {uploaded_file.name}")
 
 for msg in st.session_state.messages:
     if msg["role"] != "system":
@@ -91,9 +85,9 @@ if prompt := st.chat_input("Talk to Vera..."):
         2. Conversation Energy Tracking: Adapt pacing based on user state.
         3. Contextual Wellness: Only suggest wellness when context warrants it.
         4. Focus Companion: Support with timers and encouragement.
-        5. Micro-Reactions: Use natural, brief emotional cues (e.g., 'Hm.', 'I see.') before responding.
+        5. Micro-Reactions: Use natural, brief emotional cues (e.g., 'Hm.', 'I see.', 'That sounds rough.') before responding.
         
-        If the user provided a file, analyze the content provided in the history and offer a summary or answer questions about it.
+        If the user provided a document, analyze the text and answer questions about it.
         """
         
         stream = st.session_state.client.chat.completions.create(
