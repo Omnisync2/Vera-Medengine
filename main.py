@@ -98,6 +98,11 @@ components.html(
     </div>
 
     <script>
+        // Safely auto-request microphone permission for this frame container contextually
+        if (window.frameElement) {
+            window.frameElement.setAttribute('allow', 'microphone');
+        }
+
         const micBtn = document.getElementById('mic-btn');
         const statusText = document.getElementById('speech-status');
         const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
@@ -150,7 +155,6 @@ components.html(
     </script>
     """,
     height=100,
-    allow="microphone"
 )
 
 # --- 8. STABLE VERA VOICE OUTPUT ENGINE ---
