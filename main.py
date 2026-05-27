@@ -106,4 +106,5 @@ components.html(
             micBtn.disabled = true;
             statusText.innerText = "Voice feature unavailable on this browser version.";
         } else {
-        
+
+    
