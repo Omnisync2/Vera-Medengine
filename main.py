@@ -77,6 +77,4 @@ if prompt := st.chat_input("Ask me about health, wellness, or anything else...")
             if chunk.choices[0].delta.content:
                 full_response += chunk.choices[0].delta.content
                 placeholder.markdown(full_response)
-        
-        st.session_state.messages.append({"role": "assistant", "content": full_response})
-        
+
