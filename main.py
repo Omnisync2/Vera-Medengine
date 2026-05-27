@@ -158,7 +158,6 @@ if st.session_state.voice_mode:
                 }};
                 
                 recognition.onend = () => {{
-                    // Fallback reset style if redirect hasn't happened
                     if (statusText.innerText.indexOf("Processing") === -1) {{
                         container.style.background = '#e8f5e9';
                         container.style.borderColor = '#2e7d32';
@@ -166,13 +165,11 @@ if st.session_state.voice_mode:
                     }}
                 }};
                 
-                // Allow manual box taps to quickly invoke recording contextually
                 container.addEventListener('click', () => {{
                     try {{ recognition.start(); }} catch(e) {{}}
                 }});
             }}
 
-            // Voice Text-To-Speech Controller Logic
             const shouldSpeak = {should_speak};
             const textToSpeak = "{speak_text}";
 
@@ -185,7 +182,6 @@ if st.session_state.voice_mode:
                     msg.pitch = 1.1;
                     
                     msg.onend = () => {{
-                        // Once Vera is fully done speaking, automatically trigger the mic engine!
                         if (recognition) {{
                             try {{ recognition.start(); }} catch(e) {{}}
                         }}
@@ -194,7 +190,6 @@ if st.session_state.voice_mode:
                     statusText.innerHTML = '🔊 <strong>Vera is speaking...</strong>';
                     window.speechSynthesis.speak(msg);
                 }} else if (recognition) {{
-                    // If Vera isn't speaking right now, immediately spin up mic listening loops
                     setTimeout(() => {{
                         try {{ recognition.start(); }} catch(e) {{}}
                     }}, 800);
@@ -204,11 +199,9 @@ if st.session_state.voice_mode:
         """,
         height=130,
     )
-    # Clear speech memory to reset flag tracking loops securely
     st.session_state.last_response = None
 
 else:
-    # Standard view interface layout mode
     st.markdown("---")
     if st.button("🎙️ Enter Continuous Voice Mode"):
         st.session_state.voice_mode = True
@@ -221,7 +214,6 @@ if voice_prompt:
     prompt = voice_prompt
     st.query_params.clear()
 elif not st.session_state.voice_mode:
-    # Text input box displays ONLY if voice loop mode is inactive
     prompt = st.chat_input("Ask me about health, wellness, or anything else...")
 
 if prompt:
@@ -233,9 +225,10 @@ if prompt:
         try:
             valid_messages = [msg for msg in st.session_state.messages if isinstance(msg.get("content"), str)]
             
+            # Replaced model="llama-3.3-70b-versatile" with the ultra-fast instant model
             completion = st.session_state.client.chat.completions.create(
                 messages=valid_messages,
-                model="llama-3.3-70b-versatile",
+                model="llama-1.3-8b-instant" if "llama-1.3-8b-instant" == "llama-3.1-8b-instant" else "llama-3.1-8b-instant",
                 stream=False
             )
             response = completion.choices[0].message.content
@@ -244,7 +237,6 @@ if prompt:
                 st.markdown(response)
                 st.session_state.messages.append({"role": "assistant", "content": response})
                 
-                # Assign response details out to trigger vocal engines contextually
                 st.session_state.last_response = response
                 st.rerun()
                 
