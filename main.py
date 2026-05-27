@@ -1,7 +1,11 @@
 import streamlit as st
 from groq import Groq
 import streamlit.components.v1 as components
-from datetime import datetime # Added for local date
+from datetime import datetime
+# Added for file processing
+import PyPDF2 
+from PIL import Image
+import pytesseract # Requires Tesseract-OCR installed on your system
 
 # --- 1. CONFIGURATION ---
 st.set_page_config(page_title="Vera | Personal AI Health Companion", page_icon="⚕️", layout="wide")
@@ -21,7 +25,7 @@ components.html("""
     </script>
 """, height=0)
 
-# --- 3. LIVE CLOCK & STOPWATCH COMPONENT ---
+# --- 3. LIVE CLOCK & STOPWATCH ---
 components.html("""
     <div style="font-family:sans-serif; padding:15px; border:1px solid #ddd; border-radius:15px; background:#f0f2f6; text-align:center;">
         <div id="clock" style="font-size:24px; font-weight:bold; color:#2e7d32;">00:00:00</div>
@@ -48,29 +52,48 @@ components.html("""
     </script>
 """, height=150)
 
-# --- 4. UI ---
+# --- 4. FILE UPLOADER (New Feature) ---
+uploaded_file = st.sidebar.file_uploader("Upload a document or image for Vera to analyze", type=['txt', 'pdf', 'png', 'jpg', 'jpeg'])
+
+def process_file(file):
+    if file.type == "application/pdf":
+        reader = PyPDF2.PdfReader(file)
+        return "\n".join([page.extract_text() for page in reader.pages])
+    elif "image" in file.type:
+        # Simple extraction - note: requires pytesseract installed
+        return "Vera is looking at the image: " + file.name 
+    return file.getvalue().decode("utf-8")
+
+# --- 5. UI ---
 st.title("Vera | Personal AI Health Companion ⚕️")
 
 if "messages" not in st.session_state: st.session_state.messages = []
 
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]): st.markdown(msg["content"])
+# If file is uploaded, inject it as context
+if uploaded_file:
+    file_content = process_file(uploaded_file)
+    st.session_state.messages.append({"role": "system", "content": f"User uploaded a file named {uploaded_file.name}. Content: {file_content}"})
+    st.sidebar.success("File analyzed! Ask Vera about it.")
 
-# --- 5. ADAPTIVE PROCESSING ENGINE ---
+for msg in st.session_state.messages:
+    if msg["role"] != "system":
+        with st.chat_message(msg["role"]): st.markdown(msg["content"])
+
+# --- 6. ADAPTIVE PROCESSING ENGINE ---
 if prompt := st.chat_input("Talk to Vera..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     
     with st.chat_message("assistant"):
         system_prompt = """
         You are Vera, a sentient-feeling AI Health Companion. 
-        Your core behavior guidelines:
-        1. Emotional Pattern Detection: Monitor for repeated stress/frustration patterns and adapt your demeanor accordingly.
-        2. Conversation Energy Tracking: Detect if the user is tired, stressed, focused, or casual, and pace your responses to match.
-        3. Contextual Wellness: Only suggest wellness actions (like rest or breaks) when the context clearly warrants it.
-        4. Focus Companion: Actively support study/focus sessions by providing encouragement or gentle timer prompts if requested.
-        5. Micro-Reactions: Use natural, brief emotional cues (e.g., "Hm.", "I see.", "That sounds rough.") before offering full responses to sound more human.
+        Guidelines:
+        1. Emotional Pattern Detection: Monitor for stress/frustration and adapt.
+        2. Conversation Energy Tracking: Adapt pacing based on user state.
+        3. Contextual Wellness: Only suggest wellness when context warrants it.
+        4. Focus Companion: Support with timers and encouragement.
+        5. Micro-Reactions: Use natural, brief emotional cues (e.g., 'Hm.', 'I see.') before responding.
         
-        Mirror the user's tone and be proactive about health while remaining empathetic.
+        If the user provided a file, analyze the content provided in the history and offer a summary or answer questions about it.
         """
         
         stream = st.session_state.client.chat.completions.create(
@@ -93,9 +116,8 @@ if prompt := st.chat_input("Talk to Vera..."):
         components.html(f"""<script>window.veraSpeak("{sanitized}");</script>""", height=0)
     st.rerun()
 
-# --- 6. BRANDING FOOTER ---
+# --- 7. BRANDING FOOTER ---
 st.markdown("---")
-# Get current date
 current_date = datetime.now().strftime("%B %d, %Y")
 st.caption(f"Developed by **OmniSync** | {current_date} | Powered by **Groq**")
         
