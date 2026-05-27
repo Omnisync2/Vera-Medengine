@@ -69,21 +69,41 @@ if "messages" not in st.session_state:
     ]
 
 # --- 6. DISPLAY MESSAGES ---
-# We add a bit of padding at the bottom so content doesn't get hidden behind our new bottom bar
-st.markdown("<div style='margin-bottom: 120px;'>", unsafe_allow_html=True)
 for message in st.session_state.messages:
     if message["role"] != "system":
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
-st.markdown("</div>", unsafe_allow_html=True)
 
-# --- 7. PROCESS VOICE INPUT FROM URL ---
-query_params = st.query_params
-prompt = query_params.get("voice_input", None)
-
-if prompt:
-    st.query_params.clear() # Prevent endless looping reload
+# --- 7. STABLE VOICE ENGINE ---
+if "last_response" in st.session_state and st.session_state.last_response:
+    clean_text = st.session_state.last_response.replace('"', '&quot;').replace('\n', ' ')
     
+    components.html(
+        f"""
+        <div id="tts-data" data-text="{clean_text}"></div>
+        <script>
+            window.addEventListener('DOMContentLoaded', () => {{
+                if ('speechSynthesis' in window) {{
+                    window.speechSynthesis.cancel();
+                    const dataEl = document.getElementById('tts-data');
+                    if (dataEl) {{
+                        const textToSpeak = dataEl.getAttribute('data-text');
+                        const msg = new SpeechSynthesisUtterance(textToSpeak);
+                        msg.lang = 'en-US';
+                        msg.rate = 1.0;
+                        msg.pitch = 1.1;
+                        window.speechSynthesis.speak(msg);
+                    }}
+                }}
+            }});
+        </script>
+        """,
+        height=0,
+    )
+    st.session_state.last_response = None
+
+# --- 8. HANDLE CHAT INPUT ---
+if prompt := st.chat_input("Ask me about health, wellness, or anything else..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
@@ -103,115 +123,15 @@ if prompt:
                 st.markdown(response)
                 st.session_state.messages.append({"role": "assistant", "content": response})
                 
-                clean_response = response.replace('"', '\\"').replace('\n', ' ')
+                st.session_state.last_response = response
+                st.rerun()
                 
-                # Immediate speak output
-                components.html(
-                    f"""
-                    <script>
-                        if ('speechSynthesis' in window) {{
-                            window.speechSynthesis.cancel();
-                            const msg = new SpeechSynthesisUtterance("{clean_response}");
-                            msg.lang = 'en-US';
-                            msg.rate = 1.0;
-                            msg.pitch = 1.1;
-                            window.speechSynthesis.speak(msg);
-                        }}
-                    </script>
-                    """,
-                    height=0,
-                )
         except Exception as e:
             st.error(f"Error: {e}")
-
-# --- 8. FIXED BOTTOM ACCESSIBILITY VOICE BAR ---
-# This anchors the microphone directly to the bottom of the mobile screen, replacing the clunky text bar
-components.html(
-    """
-    <div style="
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        width: 100%;
-        background-color: #111612;
-        padding: 15px 0px;
-        box-shadow: 0 -4px 10px rgba(0,0,0,0.3);
-        text-align: center;
-        font-family: sans-serif;
-        z-index: 999999;
-    ">
-        <button id="mic-btn" style="
-            background-color: #2e7d32; 
-            color: white; 
-            border: none; 
-            padding: 15px; 
-            font-size: 18px; 
-            font-weight: bold; 
-            border-radius: 30px; 
-            cursor: pointer;
-            width: 90%;
-            max-width: 500px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
-            transition: background 0.2s;
-        ">🎙️ Hold or Tap to Speak</button>
-        <div id="speech-status" style="color: #a5d6a7; font-size: 14px; margin-top: 8px; font-weight: bold;">
-            Ready for voice command...
-        </div>
-    </div>
-
-    <script>
-        const micBtn = document.getElementById('mic-btn');
-        const statusText = document.getElementById('speech-status');
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        
-        if (!SpeechRecognition) {
-            micBtn.disabled = true;
-            statusText.innerText = "Voice input unsupported on this browser.";
-        } else {
-            const recognition = new SpeechRecognition();
-            recognition.continuous = false;
-            recognition.lang = 'en-US';
-
-            micBtn.addEventListener('click', () => {
-                try {
-                    recognition.start();
-                    micBtn.style.background = '#d32f2f';
-                    micBtn.innerText = "🛑 Vera is Listening...";
-                    statusText.innerText = "Speak clearly into your device microphone now.";
-                } catch(e) {
-                    recognition.stop();
-                }
-            });
-
-            recognition.onresult = (event) => {
-                const transcript = event.results[0][0].transcript;
-                statusText.innerText = "Sending query...";
-                
-                const currentUrl = new URL(window.location.href);
-                currentUrl.searchParams.set("voice_input", transcript);
-                window.location.href = currentUrl.toString();
-            };
-
-            recognition.onerror = (event) => {
-                statusText.innerText = "Error: " + event.error;
-                resetBtn();
-            };
-            
-            recognition.onend = () => {
-                resetBtn();
-            };
-
-            function resetBtn() {
-                micBtn.style.background = '#2e7d32';
-                micBtn.innerText = "🎙️ Hold or Tap to Speak";
-            }
-        }
-    </script>
-    """,
-    height=110,
-)
+            if len(st.session_state.messages) > 1:
+                st.session_state.messages.pop()
 
 # --- 9. FOOTER ---
 st.markdown("---")
 st.caption("Powered by Groq | Developed by OmniSync")
-            
+    
