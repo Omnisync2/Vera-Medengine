@@ -74,8 +74,13 @@ for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-# --- 7. SAFE VOICE DICTATION BOX ---
-st.markdown("### 🎙️ Voice Dictation")
+# --- 7. HANDS-FREE VOICE ASSISTANT COMPONENT ---
+st.markdown("### 🎙️ Accessibility Mode")
+
+# Check if JavaScript passed us a spoken prompt via the URL query parameters
+query_params = st.query_params
+voice_prompt = query_params.get("voice_input", None)
+
 components.html(
     """
     <div style="text-align: center; font-family: sans-serif;">
@@ -83,17 +88,18 @@ components.html(
             background-color: #2e7d32; 
             color: white; 
             border: none; 
-            padding: 10px 20px; 
-            font-size: 16px; 
+            padding: 20px; 
+            font-size: 18px; 
             font-weight: bold; 
-            border-radius: 30px; 
+            border-radius: 50px; 
             cursor: pointer;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            width: 85%;
-        ">Tap to Speak</button>
-        <div id="speech-status" style="color: #444; font-size: 15px; margin-top: 10px; padding: 5px; border-radius: 5px; background: #f9f9f9; min-height: 20px;">
-            Click to start speaking...
-        </div>
+            box-shadow: 0 6px 10px rgba(0,0,0,0.2);
+            width: 90%;
+            min-height: 70px;
+        ">🎙️ Tap Anywhere to Speak</button>
+        <p id="speech-status" style="color: #444; font-size: 16px; margin-top: 12px; font-weight: 500;">
+            Tap the large button and start talking.
+        </p>
     </div>
 
     <script>
@@ -113,8 +119,8 @@ components.html(
                 try {
                     recognition.start();
                     micBtn.style.background = '#d32f2f';
-                    micBtn.innerText = "Listening...";
-                    statusText.innerText = "Speak now...";
+                    micBtn.innerText = "🛑 Listening...";
+                    statusText.innerText = "Vera is listening. Speak your question now...";
                 } catch(e) {
                     recognition.stop();
                 }
@@ -122,33 +128,52 @@ components.html(
 
             recognition.onresult = (event) => {
                 const transcript = event.results[0][0].transcript;
-                statusText.innerHTML = "<strong>Copy this:</strong> " + transcript;
-                micBtn.style.background = '#2e7d32';
-                micBtn.innerText = "Tap to Speak";
+                statusText.innerText = "Processing: " + transcript;
+                
+                // Safely send the text back to Streamlit by updating the URL query parameters
+                // This triggers an automatic page refresh so Python can grab the text legally!
+                const currentUrl = new URL(window.location.href);
+                currentUrl.searchParams.set("voice_input", transcript);
+                window.location.href = currentUrl.toString();
             };
 
             recognition.onerror = (event) => {
-                statusText.innerText = "Microphone error: " + event.error;
-                micBtn.style.background = '#2e7d32';
-                micBtn.innerText = "Tap to Speak";
+                statusText.innerText = "Error catching voice: " + event.error;
+                resetBtn();
+            };
+            
+            recognition.onend = () => {
+                resetBtn();
             };
 
-            recognition.onend = () => {
+            function resetBtn() {
                 micBtn.style.background = '#2e7d32';
-                micBtn.innerText = "Tap to Speak";
-            };
+                micBtn.innerText = "🎙️ Tap Anywhere to Speak";
+            }
         }
     </script>
     """,
-    height=100,
+    height=120,
 )
 
-# --- 8. HANDLE USER INPUT ---
-if prompt := st.chat_input("Ask me about health, wellness, or anything else..."):
+# --- 8. PROCESS USER INPUT (TEXT OR VOICE) ---
+prompt = None
+
+# If a voice prompt came through from the URL, use it and clear the query parameters
+if voice_prompt:
+    prompt = voice_prompt
+    st.query_params.clear() # Clear the URL so it doesn't loop forever
+else:
+    # Otherwise, fall back to the standard manual chat text box
+    prompt = st.chat_input("Ask me about health, wellness, or anything else...")
+
+if prompt:
+    # Append and display user input
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
+    # Generate Response from Groq
     with st.chat_message("assistant"):
         try:
             valid_messages = [msg for msg in st.session_state.messages if isinstance(msg.get("content"), str)]
@@ -163,6 +188,29 @@ if prompt := st.chat_input("Ask me about health, wellness, or anything else...")
             if response:
                 st.markdown(response)
                 st.session_state.messages.append({"role": "assistant", "content": response})
+                
+                # Format the text safely for JavaScript strings
+                clean_response = response.replace('"', '\\"').replace('\n', ' ')
+                
+                # Inject the automatic speech synthesis player
+                components.html(
+                    f"""
+                    <script>
+                        if ('speechSynthesis' in window) {{
+                            window.speechSynthesis.cancel(); // Reset previous voice lines
+                            
+                            const msg = new SpeechSynthesisUtterance("{clean_response}");
+                            msg.lang = 'en-US';
+                            msg.rate = 1.0;
+                            msg.pitch = 1.1; 
+                            
+                            window.speechSynthesis.speak(msg);
+                        }}
+                    </script>
+                    """,
+                    height=0,
+                )
+                
         except Exception as e:
             st.error(f"Error: {e}")
             if len(st.session_state.messages) > 1:
