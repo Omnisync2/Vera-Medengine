@@ -214,3 +214,4 @@ components.html(
 # --- 9. FOOTER ---
 st.markdown("---")
 st.caption("Powered by Groq | Developed by OmniSync")
+            
