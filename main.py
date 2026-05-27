@@ -1,6 +1,7 @@
 import streamlit as st
 from groq import Groq
-from datetime import datetime
+from datetime import datetime, timezone
+import pytz
 
 # --- 1. CONFIGURATION ---
 st.set_page_config(page_title="Vera: Health Assistant", page_icon="⚕️", layout="wide")
@@ -11,13 +12,18 @@ if "client" not in st.session_state:
 if "messages" not in st.session_state:
     st.session_state.messages = [{"role": "system", "content": "You are a concise, supportive health assistant."}]
 
-# --- 3. LAYOUT: TITLE & LIVE TIMER ---
+# --- 3. LAYOUT: TITLE & DYNAMIC LOCAL TIMER ---
 col1, col2 = st.columns([0.85, 0.15])
 with col1:
     st.title("Vera: Your Personal Health Assistant ⚕️")
 with col2:
-    # Live timer formatted as HH:MM:SS
-    st.markdown(f"**{datetime.now().strftime('%H:%M:%S')}**")
+    # Detect user's timezone from browser context
+    user_tz_str = st.context.timezone or "UTC"
+    user_tz = pytz.timezone(user_tz_str)
+    
+    # Calculate local time based on user's timezone
+    local_now = datetime.now(timezone.utc).astimezone(user_tz)
+    st.markdown(f"**{local_now.strftime('%H:%M:%S')}**")
 
 # --- 4. CHAT HISTORY DISPLAY ---
 for msg in st.session_state.messages:
@@ -26,14 +32,11 @@ for msg in st.session_state.messages:
             st.markdown(msg["content"])
 
 # --- 5. INPUT ENGINE (Voice or Text) ---
-# Native Audio Input for stability
 audio_value = st.audio_input("🎙️ Record or type below")
 
-# Text Input
 if prompt := st.chat_input("Ask me about health..."):
-    audio_value = None # Prioritize text if user types
+    audio_value = None 
 
-# Handle the processing logic
 input_text = None
 if audio_value:
     with st.spinner("Transcribing..."):
@@ -55,7 +58,7 @@ if input_text:
             model="llama-3.1-8b-instant",
             stream=True
         )
-        # Use st.write_stream to safely handle chunks and prevent crashes
+        
         def stream_gen():
             for chunk in stream:
                 if chunk.choices[0].delta.content:
@@ -68,4 +71,4 @@ if input_text:
 # --- 6. FOOTER ---
 st.markdown("---")
 st.caption("Powered by Groq | Developed by OmniSync")
-    
+        
