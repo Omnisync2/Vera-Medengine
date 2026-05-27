@@ -55,17 +55,17 @@ if "client" not in st.session_state:
         st.error("API Key missing! Please add GROQ_API_KEY to your Streamlit Secrets.")
         st.stop()
 
-# --- 5. INITIALIZE STATE VARIABLE TRACKERS WITH UNLIMITED MULTILINGUAL SYSTEM INSTRUCTION ---
+# --- 5. INITIALIZE STATE VARIABLE TRACKERS (BALANCED LANGUAGE RULE) ---
 if "messages" not in st.session_state:
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     system_instruction = (
-        f"You are Vera, a helpful Health Assistant created by OmniSync. "
+        f"You are Vera, a helpful Health Assistant developed by OmniSync. "
         f"The current date and time is {now}. "
-        "CRITICAL GLOBAL LANGUAGE RULE: You are completely multilingual. You have native fluency in every language "
-        "and regional dialect in the world (including English, Tagalog, Ilocano, Pangasinense, Spanish, Mandarin, etc.). "
-        "Always automatically analyze the language the user speaks or writes in, and reply perfectly "
-        "using that identical language and cultural context naturally. If asked about your creator, "
-        "state that you were developed by OmniSync."
+        "LANGUAGE RULE: Speak and respond in English by default. However, you are highly multilingual "
+        "and capable of understanding any language or regional dialect perfectly (including Tagalog, Ilocano, Pangasinense, Spanish, etc.). "
+        "Only change your output language if the user explicitly asks you to change it, or if they talk to you directly "
+        "in a non-English language. Otherwise, keep your responses in clean, supportive English. "
+        "Keep your answers brief and concise so they are pleasant to listen to when read aloud."
     )
     st.session_state.messages = [
         {"role": "system", "content": system_instruction}
@@ -77,7 +77,7 @@ if "voice_mode" not in st.session_state:
 if "last_response" not in st.session_state:
     st.session_state.last_response = None
 
-# --- 6. ROUTE STATE CONTEXT via INCOMING PARAMS ---
+# --- 6. ROUTE INCOMING VOICE PARAMS ---
 voice_prompt = st.query_params.get("voice_input", None)
 exit_signal = st.query_params.get("exit_voice", None)
 
@@ -92,7 +92,7 @@ for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-# --- 8. VOICE ENGINE PIPELINE BLOCK (INPUT & OUTPUT CONTEXT) ---
+# --- 8. SMART VOICE ENGINE CONTROLLER ---
 if st.session_state.voice_mode:
     st.markdown("### 🟢 Continuous Voice Mode Active")
     
@@ -135,12 +135,12 @@ if st.session_state.voice_mode:
             if (SpeechRecognition) {{
                 recognition = new SpeechRecognition();
                 recognition.continuous = false;
-                recognition.lang = ''; 
+                recognition.lang = 'en-US'; // Default speech interpretation context safely to English
 
                 recognition.onstart = () => {{
                     container.style.background = '#ffebee';
                     container.style.borderColor = '#d32f2f';
-                    statusText.innerHTML = '<span style="color: #d32f2f;">🔴 Vera is listening... Speak in any language!</span>';
+                    statusText.innerHTML = '<span style="color: #d32f2f;">🔴 Vera is listening... Speak now!</span>';
                 }};
                 
                 recognition.onresult = (event) => {{
@@ -193,13 +193,14 @@ if st.session_state.voice_mode:
                 }} else if (recognition) {{
                     setTimeout(() => {{
                         try {{ recognition.start(); }} catch(e) {{}}
-                    }}, 800);
+                    }}, 500);
                 }}
             }});
         </script>
         """,
         height=130,
     )
+    # Clear memory quietly without triggering an immediate crash or loop stall
     st.session_state.last_response = None
 
 else:
@@ -208,7 +209,7 @@ else:
         st.session_state.voice_mode = True
         st.rerun()
 
-# --- 9. STREAMING PROCESSING CONTEXT PIPELINE ENGINE ---
+# --- 9. STREAMING ENGINE PIPELINE CONTEXT ---
 prompt = None
 
 if voice_prompt:
@@ -226,26 +227,26 @@ if prompt:
         try:
             valid_messages = [msg for msg in st.session_state.messages if isinstance(msg.get("content"), str)]
             
-            # Fire the token stream to Groq
             stream = st.session_state.client.chat.completions.create(
                 messages=valid_messages,
                 model="llama-3.1-8b-instant",
                 stream=True 
             )
             
-            # Custom token extraction helper for Streamlit to prevent raw object printing
             def generate_clean_tokens():
                 for chunk in stream:
                     if chunk.choices[0].delta.content is not None:
                         yield chunk.choices[0].delta.content
 
-            # Render the pure words cleanly in real-time as they load
             response = st.write_stream(generate_clean_tokens())
             
             if response:
                 st.session_state.messages.append({"role": "assistant", "content": response})
                 st.session_state.last_response = response
-                st.rerun()
+                
+                # Optimized: If voice mode is active, we reload ONCE so the HTML box speaks it immediately.
+                if st.session_state.voice_mode:
+                    st.rerun()
                 
         except Exception as e:
             st.error(f"Error: {e}")
