@@ -7,7 +7,6 @@ import streamlit.components.v1 as components
 st.set_page_config(page_title="Vera: Personal AI Health Companion", page_icon="⚕️", layout="wide")
 
 # --- 2. JAVASCRIPT ENGINE (TTS Bridge) ---
-# This listens for a 'speak' message and triggers browser audio
 components.html("""
     <script>
         function speakVera(text) {
@@ -58,7 +57,6 @@ st.title("Vera ⚕️ | Personal AI Health Companion")
 
 # --- 6. VOICE INPUT (Native & Stable) ---
 audio_value = st.audio_input("🎙️ Record your symptoms or question")
-
 if audio_value:
     with st.spinner("Analyzing audio..."):
         trans = st.session_state.client.audio.transcriptions.create(
@@ -94,7 +92,6 @@ if len(st.session_state.messages) > 1 and st.session_state.messages[-1]["role"] 
         
         full_res = ""
         placeholder = st.empty()
-        
         for chunk in stream:
             if chunk.choices[0].delta.content:
                 full_res += chunk.choices[0].delta.content
@@ -102,14 +99,16 @@ if len(st.session_state.messages) > 1 and st.session_state.messages[-1]["role"] 
         
         st.session_state.messages.append({"role": "assistant", "content": full_res})
         
-        # Trigger Speech
+        # Audio Button
         sanitized = full_res.replace('"', '\\"').replace('\n', ' ')
-        components.html(f"""
-            <script>
-                window.parent.postMessage({{type: 'speak', text: "{sanitized}"}}, '*');
-            </script>
-        """, height=0)
+        if st.button("🔊 Hear Vera Speak"):
+            components.html(f"""
+                <script>
+                    window.parent.postMessage({{type: 'speak', text: "{sanitized}"}}, '*');
+                </script>
+            """, height=0)
     st.rerun()
 
 st.markdown("---")
 st.caption("Powered by Groq | Vera AI Engine")
+        
