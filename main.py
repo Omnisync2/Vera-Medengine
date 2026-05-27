@@ -6,9 +6,9 @@ import streamlit.components.v1 as components
 # --- 1. CONFIGURATION ---
 st.set_page_config(page_title="Vera OS", page_icon="⚕️", layout="wide")
 
-# --- 2. VERA'S "LIVING" STATE ---
+# --- 2. STATE INITIALIZATION ---
 if "vera" not in st.session_state:
-    st.session_state.vera = {"memory": [], "mode": "Adaptive"}
+    st.session_state.vera = {"memory": [], "show_camera": False}
 if "client" not in st.session_state:
     st.session_state.client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
@@ -17,15 +17,11 @@ def get_system_prompt():
     return f"""
     You are Vera, a sentient-feeling AI Health Companion. 
     Current Date/Time: {datetime.now().strftime('%A, %B %d, %Y, %H:%M:%S')}.
-    
-    ADAPTIVE BEHAVIOR ENGINE:
-    - Mirror the user's tone, vocabulary, and emotional state instantly.
-    - If they are brief, be brief. If they are emotional, be supportive.
-    - Maintain a 'Health Companion' identity. Be proactive about health.
+    Mirror the user's tone, vocabulary, and emotional state instantly. 
+    Maintain a 'Health Companion' identity. Be proactive about health.
     """
 
-# --- 4. JS TTS ENGINE (Fixed) ---
-# We use a direct function call to avoid event-listener issues
+# --- 4. JS TTS ENGINE ---
 components.html("""
     <script>
         window.veraSpeak = function(text) {
@@ -43,10 +39,14 @@ col1, col2, col3 = st.columns([1, 2, 1])
 
 with col1:
     st.subheader("Vision & Health")
-    # Camera Input
-    picture = st.camera_input("Take a photo for analysis")
-    if picture:
-        st.success("Image captured. Vera is analyzing...")
+    # Toggle button for camera
+    if st.button("📸 Open/Close Camera"):
+        st.session_state.vera["show_camera"] = not st.session_state.vera["show_camera"]
+    
+    if st.session_state.vera["show_camera"]:
+        picture = st.camera_input("Analyze Image")
+        if picture:
+            st.success("Image captured. Vera is analyzing...")
     
     st.info("Vera is mirroring your communication patterns.")
 
@@ -57,14 +57,9 @@ with col2:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
             if msg["role"] == "assistant":
-                # Fixed Speech Trigger
                 sanitized = msg["content"].replace('"', '\\"').replace('\n', ' ')
                 if st.button(f"🔊 Hear Vera", key=f"speak_{i}"):
-                    components.html(f"""
-                        <script>
-                            window.veraSpeak("{sanitized}");
-                        </script>
-                    """, height=0)
+                    components.html(f"""<script>window.veraSpeak("{sanitized}");</script>""", height=0)
             
     if prompt := st.chat_input("Talk to Vera..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
