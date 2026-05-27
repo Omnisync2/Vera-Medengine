@@ -7,7 +7,6 @@ import streamlit.components.v1 as components
 st.set_page_config(page_title="Vera: Your Personal Health Assistant ⚕️", page_icon="⚕️")
 
 # --- 2. FIXED LIVE CLOCK COMPONENT ---
-# Using components.html guarantees the JavaScript runs and won't get blocked by the browser
 components.html(
     """
     <div id="clock" style="
@@ -75,17 +74,83 @@ for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-# --- 7. HANDLE USER INPUT ---
+# --- 7. SAFE VOICE DICTATION BOX ---
+st.markdown("### 🎙️ Voice Dictation")
+components.html(
+    """
+    <div style="text-align: center; font-family: sans-serif;">
+        <button id="mic-btn" style="
+            background-color: #2e7d32; 
+            color: white; 
+            border: none; 
+            padding: 10px 20px; 
+            font-size: 16px; 
+            font-weight: bold; 
+            border-radius: 30px; 
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            width: 85%;
+        ">Tap to Speak</button>
+        <div id="speech-status" style="color: #444; font-size: 15px; margin-top: 10px; padding: 5px; border-radius: 5px; background: #f9f9f9; min-height: 20px;">
+            Click to start speaking...
+        </div>
+    </div>
+
+    <script>
+        const micBtn = document.getElementById('mic-btn');
+        const statusText = document.getElementById('speech-status');
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        
+        if (!SpeechRecognition) {
+            micBtn.disabled = true;
+            statusText.innerText = "Voice input not supported on this browser version.";
+        } else {
+            const recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.lang = 'en-US';
+
+            micBtn.addEventListener('click', () => {
+                try {
+                    recognition.start();
+                    micBtn.style.background = '#d32f2f';
+                    micBtn.innerText = "Listening...";
+                    statusText.innerText = "Speak now...";
+                } catch(e) {
+                    recognition.stop();
+                }
+            });
+
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                statusText.innerHTML = "<strong>Copy this:</strong> " + transcript;
+                micBtn.style.background = '#2e7d32';
+                micBtn.innerText = "Tap to Speak";
+            };
+
+            recognition.onerror = (event) => {
+                statusText.innerText = "Microphone error: " + event.error;
+                micBtn.style.background = '#2e7d32';
+                micBtn.innerText = "Tap to Speak";
+            };
+
+            recognition.onend = () => {
+                micBtn.style.background = '#2e7d32';
+                micBtn.innerText = "Tap to Speak";
+            };
+        }
+    </script>
+    """,
+    height=100,
+)
+
+# --- 8. HANDLE USER INPUT ---
 if prompt := st.chat_input("Ask me about health, wellness, or anything else..."):
-    # Add user message
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Generate Response
     with st.chat_message("assistant"):
         try:
-            # Filter the list to ensure only strings are passed
             valid_messages = [msg for msg in st.session_state.messages if isinstance(msg.get("content"), str)]
             
             completion = st.session_state.client.chat.completions.create(
@@ -103,6 +168,6 @@ if prompt := st.chat_input("Ask me about health, wellness, or anything else...")
             if len(st.session_state.messages) > 1:
                 st.session_state.messages.pop()
 
-# --- 8. FOOTER ---
+# --- 9. FOOTER ---
 st.markdown("---")
 st.caption("Powered by Groq | Developed by OmniSync")
