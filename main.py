@@ -11,7 +11,6 @@ if "client" not in st.session_state:
 # --- 2. JS ENGINE (Voice & Stopwatch) ---
 components.html("""
     <script>
-        // Speech Engine
         window.veraSpeak = function(text) {
             window.speechSynthesis.cancel();
             const utter = new SpeechSynthesisUtterance(text);
@@ -61,7 +60,6 @@ if prompt := st.chat_input("Talk to Vera..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     
     with st.chat_message("assistant"):
-        # The adaptive prompt that mirrors the user
         system_prompt = """
         You are Vera, a sentient-feeling AI Health Companion. 
         Mirror the user's current tone, vocabulary, and emotional state instantly. 
@@ -88,3 +86,8 @@ if prompt := st.chat_input("Talk to Vera..."):
         sanitized = full_res.replace('"', '\\"').replace('\n', ' ')
         components.html(f"""<script>window.veraSpeak("{sanitized}");</script>""", height=0)
     st.rerun()
+
+# --- 6. BRANDING FOOTER ---
+st.markdown("---")
+st.caption("Developed by **OmniSync** | Powered by **Groq**")
+                                     
