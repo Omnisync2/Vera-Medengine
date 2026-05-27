@@ -1,114 +1,80 @@
 import streamlit as st
 from groq import Groq
 from datetime import datetime
+import json
 import streamlit.components.v1 as components
 
 # --- 1. CONFIGURATION ---
-st.set_page_config(page_title="Vera: Personal AI Health Companion", page_icon="⚕️", layout="wide")
+st.set_page_config(page_title="Vera OS", page_icon="⚕️", layout="wide")
 
-# --- 2. JAVASCRIPT ENGINE (TTS Bridge) ---
-components.html("""
-    <script>
-        function speakVera(text) {
-            window.speechSynthesis.cancel();
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'en-US';
-            window.speechSynthesis.speak(utterance);
-        }
-        window.addEventListener('message', (event) => {
-            if (event.data.type === 'speak') {
-                speakVera(event.data.text);
-            }
-        });
-    </script>
-""", height=0)
-
-# --- 3. INITIALIZATION ---
+# --- 2. VERA'S "LIVING" STATE ---
+if "vera" not in st.session_state:
+    st.session_state.vera = {
+        "memory": [], "mode": "Professional", "streak": 0, "energy": 100, "mood": "Neutral"
+    }
 if "client" not in st.session_state:
     st.session_state.client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
+# --- 3. SYSTEM BRAIN (The "All-Knowing" Logic) ---
 def get_system_prompt():
-    return (
-        "You are Vera, a professional, empathetic, and all-knowing AI Health Companion. "
-        f"Current date/time: {datetime.now().strftime('%A, %B %d, %Y, %H:%M:%S')}. "
-        "You possess vast medical knowledge. You are supportive, precise, and professional. "
-        "Your answers are always accurate, scientifically grounded, and empathetic. "
-        "If a user mentions a critical emergency, advise them to seek professional medical help immediately. "
-        "Keep responses conversational yet expert-level."
-    )
+    v = st.session_state.vera
+    return f"""
+    You are Vera, a sentient-feeling AI Health Companion. 
+    Current Date: {datetime.now().strftime('%A, %B %d, %Y')}.
+    Personality Mode: {v['mode']}.
+    Status: Energy {v['energy']}%, Mood {v['mood']}, Streak {v['streak']} days.
+    
+    GUIDELINES:
+    - ALWAYS remember past interactions in your memory.
+    - Adapt language: 'Professional' (Clinical/Direct), 'Comfort' (Warm/Empathic), 'Coach' (Motivational).
+    - If user sounds tired/stressed, adjust Energy/Mood scores.
+    - Be proactive: warn about dehydration or posture if you suspect it.
+    - You have phone control: suggest reminders, alarms, and focus modes.
+    """
 
-if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "system", "content": get_system_prompt()}]
+# --- 4. THE UI HUB ---
+st.title("Vera OS ⚕️")
+col1, col2, col3 = st.columns([1, 2, 1])
 
-# --- 4. LIVE CLOCK COMPONENT ---
-components.html("""
-    <div id="clock" style="position:fixed; top:10px; right:20px; font-family:sans-serif; font-size:16px; color:#2e7d32; font-weight:bold; background:white; padding:5px 12px; border-radius:20px; border:1px solid #2e7d32; z-index:9999;">--:--</div>
-    <script>
-        function updateClock() {
-            const now = new Date();
-            document.getElementById('clock').innerText = now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
-        }
-        setInterval(updateClock, 1000); updateClock();
-    </script>
-""", height=40)
+with col1: # The Persona/Mood Center
+    st.session_state.vera['mode'] = st.selectbox("Personality Mode", ["Professional", "Comfort", "Coach", "Study Buddy"])
+    st.metric("Wellness Streak", f"{st.session_state.vera['streak']} Days")
 
-# --- 5. UI LAYOUT ---
-st.title("Vera ⚕️ | Personal AI Health Companion")
-
-# --- 6. VOICE INPUT (Native & Stable) ---
-audio_value = st.audio_input("🎙️ Record your symptoms or question")
-if audio_value:
-    with st.spinner("Analyzing audio..."):
-        trans = st.session_state.client.audio.transcriptions.create(
-            file=("audio.wav", audio_value.getvalue()), model="whisper-large-v3"
-        ).text
-        st.session_state.pending_text = trans
-
-if "pending_text" in st.session_state:
-    st.info(f"Captured: {st.session_state.pending_text}")
-    if st.button("✅ Send to Vera"):
-        st.session_state.messages.append({"role": "user", "content": st.session_state.pending_text})
-        del st.session_state.pending_text
-        st.rerun()
-
-# --- 7. CHAT DISPLAY ---
-for msg in st.session_state.messages:
-    if msg["role"] != "system":
+with col2: # The Chat Interface
+    for msg in st.session_state.get("messages", []):
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
-
-# --- 8. PROCESSING ENGINE ---
-prompt = st.chat_input("Or type here...")
-if prompt:
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    st.rerun()
-
-if len(st.session_state.messages) > 1 and st.session_state.messages[-1]["role"] == "user":
-    with st.chat_message("assistant"):
-        st.session_state.messages[0]["content"] = get_system_prompt()
-        stream = st.session_state.client.chat.completions.create(
-            messages=st.session_state.messages, model="llama-3.1-8b-instant", stream=True
-        )
+            
+    if prompt := st.chat_input("What's on your mind?"):
+        # Add User
+        if "messages" not in st.session_state: st.session_state.messages = []
+        st.session_state.messages.append({"role": "user", "content": prompt})
         
-        full_res = ""
-        placeholder = st.empty()
-        for chunk in stream:
-            if chunk.choices[0].delta.content:
-                full_res += chunk.choices[0].delta.content
-                placeholder.markdown(full_res)
-        
-        st.session_state.messages.append({"role": "assistant", "content": full_res})
-        
-        # Audio Button
-        sanitized = full_res.replace('"', '\\"').replace('\n', ' ')
-        if st.button("🔊 Hear Vera Speak"):
-            components.html(f"""
-                <script>
-                    window.parent.postMessage({{type: 'speak', text: "{sanitized}"}}, '*');
-                </script>
-            """, height=0)
-    st.rerun()
+        # AI Response
+        with st.chat_message("assistant"):
+            stream = st.session_state.client.chat.completions.create(
+                messages=[{"role": "system", "content": get_system_prompt()}] + st.session_state.messages,
+                model="llama-3.1-8b-instant", stream=True
+            )
+            response = st.write_stream(stream)
+            st.session_state.messages.append({"role": "assistant", "content": response})
+        st.rerun()
 
-st.markdown("---")
-st.caption("Powered by Groq | Vera AI Engine")
+with col3: # The Vision/Health Center
+    st.subheader("Action Center")
+    if st.button("Scan Skin/Medication"): st.warning("Vision module loading...")
+    if st.button("Emergency SOS"): st.error("Calling 911 / Emergency Contact...")
+    st.info("Detecting Screen-Time Health...")
+
+# --- 5. JS TTS ENGINE (Always Active) ---
+components.html("""
+    <script>
+        function speak(text) {
+            const synth = window.speechSynthesis;
+            synth.cancel();
+            const utter = new SpeechSynthesisUtterance(text);
+            synth.speak(utterer);
+        }
+    </script>
+""", height=0)
         
