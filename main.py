@@ -15,32 +15,36 @@ if "messages" not in st.session_state:
         {"role": "system", "content": "You are a concise, supportive health assistant. Answer in 1-3 sentences."}
     ]
 
-# --- 3. SIDEBAR / TOP LAYOUT ---
-# Using columns to put the clock at the top right
-col1, col2 = st.columns([4, 1])
+# --- 3. LAYOUT: CLOCK TOP RIGHT ---
+col1, col2 = st.columns([0.85, 0.15])
 with col1:
     st.title("Vera: Your Personal Health Assistant ⚕️")
 with col2:
-    # Clock placeholder
+    # Clock placeholder in top right
     clock_placeholder = st.empty()
+    now = datetime.now().strftime("%H:%M:%S")
+    clock_placeholder.markdown(f"**{now}**")
 
-# Update clock loop logic
-now = datetime.now().strftime("%H:%M:%S")
-clock_placeholder.markdown(f"**Current Time:**<br> {now}", unsafe_allow_html=True)
+# --- 4. CHAT BOX & VOICE INPUT ---
+# Display history
+for msg in st.session_state.messages:
+    if msg["role"] != "system":
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
 
-# --- 4. STABLE VOICE ENGINE ---
-# This widget is native and won't crash your browser
-audio_value = st.audio_input("🎙️ Tap to record your question")
+# --- 5. STABLE VOICE ENGINE ---
+audio_value = st.audio_input("🎙️ Record your health question")
 
 if audio_value:
-    # 1. Transcribe (Auto-sent via Groq Whisper)
-    with st.spinner("Transcribing..."):
+    # Fix: Ensure audio data is processed correctly for Groq
+    with st.spinner("Processing..."):
+        # We pass a proper filename to help Groq's API identify the format
         transcript = st.session_state.client.audio.transcriptions.create(
             file=("audio.wav", audio_value.getvalue()),
             model="whisper-large-v3",
         ).text
     
-    # 2. Process (Auto-sent to Groq Llama)
+    # Process the transcription
     st.session_state.messages.append({"role": "user", "content": transcript})
     
     with st.chat_message("user"):
@@ -55,15 +59,10 @@ if audio_value:
         full_response = st.write_stream(stream)
         st.session_state.messages.append({"role": "assistant", "content": full_response})
     
-    # Rerun to clear the audio widget and show the new chat message immediately
+    # Force a rerun to refresh the UI and clear the audio input
     st.rerun()
-
-# --- 5. DISPLAY CHAT HISTORY ---
-for msg in st.session_state.messages:
-    if msg["role"] != "system":
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
 
 # --- 6. FOOTER ---
 st.markdown("---")
 st.caption("Powered by Groq | Developed by OmniSync")
+        
