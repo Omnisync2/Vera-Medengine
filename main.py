@@ -106,5 +106,111 @@ components.html(
             micBtn.disabled = true;
             statusText.innerText = "Voice feature unavailable on this browser version.";
         } else {
+            const recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.lang = 'en-US';
 
+            micBtn.addEventListener('click', () => {
+                try {
+                    recognition.start();
+                    micBtn.style.background = '#d32f2f';
+                    micBtn.innerText = "Listening...";
+                    statusText.innerText = "Speak clearly into your mic now...";
+                } catch(e) {
+                    recognition.stop();
+                }
+            });
+
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(transcript);
+                    statusText.innerHTML = '📋 <strong>Auto-Copied:</strong> "' + transcript + '"<br><span style="color: #2e7d32;">Tap the chatbox below, paste, and hit send!</span>';
+                } else {
+                    statusText.innerHTML = '<strong>Spoken:</strong> "' + transcript + '"';
+                }
+                resetBtn();
+            };
+
+            recognition.onerror = (event) => {
+                statusText.innerText = "Mic error: " + event.error;
+                resetBtn();
+            };
+
+            recognition.onend = () => {
+                resetBtn();
+            };
+
+            function resetBtn() {
+                micBtn.style.background = '#2e7d32';
+                micBtn.innerText = "🎙️ Tap to Speak";
+            }
+        }
+    </script>
+    """,
+    height=100,
+    allow="microphone"
+)
+
+# --- 8. STABLE VERA VOICE OUTPUT ENGINE ---
+if "last_response" in st.session_state and st.session_state.last_response:
+    clean_text = st.session_state.last_response.replace('"', '&quot;').replace('\n', ' ')
+    
+    components.html(
+        f"""
+        <div id="tts-data" data-text="{clean_text}"></div>
+        <script>
+            window.addEventListener('DOMContentLoaded', () => {{
+                if ('speechSynthesis' in window) {{
+                    window.speechSynthesis.cancel();
+                    const dataEl = document.getElementById('tts-data');
+                    if (dataEl) {{
+                        const textToSpeak = dataEl.getAttribute('data-text');
+                        const msg = new SpeechSynthesisUtterance(textToSpeak);
+                        msg.lang = 'en-US';
+                        msg.rate = 1.0;
+                        msg.pitch = 1.1;
+                        window.speechSynthesis.speak(msg);
+                    }}
+                }}
+            }});
+        </script>
+        """,
+        height=0,
+    )
+    st.session_state.last_response = None
+
+# --- 9. HANDLE CHAT INPUT ---
+if prompt := st.chat_input("Ask me about health, wellness, or anything else..."):
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    with st.chat_message("assistant"):
+        try:
+            valid_messages = [msg for msg in st.session_state.messages if isinstance(msg.get("content"), str)]
+            
+            completion = st.session_state.client.chat.completions.create(
+                messages=valid_messages,
+                model="llama-3.3-70b-versatile",
+                stream=False
+            )
+            response = completion.choices[0].message.content
+            
+            if response:
+                st.markdown(response)
+                st.session_state.messages.append({"role": "assistant", "content": response})
+                
+                st.session_state.last_response = response
+                st.rerun()
+                
+        except Exception as e:
+            st.error(f"Error: {e}")
+            if len(st.session_state.messages) > 1:
+                st.session_state.messages.pop()
+
+# --- 10. FOOTER ---
+st.markdown("---")
+st.caption("Powered by Groq | Developed by OmniSync")
     
