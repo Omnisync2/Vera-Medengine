@@ -135,7 +135,6 @@ if st.session_state.voice_mode:
             if (SpeechRecognition) {{
                 recognition = new SpeechRecognition();
                 recognition.continuous = false;
-                // Set to empty/unset to allow standard automatic multi-language detection by the browser engine
                 recognition.lang = ''; 
 
                 recognition.onstart = () => {{
@@ -180,7 +179,6 @@ if st.session_state.voice_mode:
                     window.speechSynthesis.cancel();
                     const msg = new SpeechSynthesisUtterance(textToSpeak);
                     
-                    // Let browser attempt voice profile selection automatically based on context
                     msg.rate = 1.0;
                     msg.pitch = 1.1;
                     
@@ -228,15 +226,21 @@ if prompt:
         try:
             valid_messages = [msg for msg in st.session_state.messages if isinstance(msg.get("content"), str)]
             
-            # 1. Fire the token stream to Groq
+            # Fire the token stream to Groq
             stream = st.session_state.client.chat.completions.create(
                 messages=valid_messages,
                 model="llama-3.1-8b-instant",
-                stream=True # TURNED STREAMING ON FOR REAL-TIME DISPLAY VALUE!
+                stream=True 
             )
             
-            # 2. Render words instantly on screen as they stream in
-            response = st.write_stream(stream)
+            # Custom token extraction helper for Streamlit to prevent raw object printing
+            def generate_clean_tokens():
+                for chunk in stream:
+                    if chunk.choices[0].delta.content is not None:
+                        yield chunk.choices[0].delta.content
+
+            # Render the pure words cleanly in real-time as they load
+            response = st.write_stream(generate_clean_tokens())
             
             if response:
                 st.session_state.messages.append({"role": "assistant", "content": response})
@@ -251,3 +255,4 @@ if prompt:
 # --- 10. FOOTER ---
 st.markdown("---")
 st.caption("Powered by Groq | Developed by OmniSync")
+    
