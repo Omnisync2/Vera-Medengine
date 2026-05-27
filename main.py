@@ -1,23 +1,32 @@
 import streamlit as st
 from groq import Groq
 from datetime import datetime
-import streamlit as st
+import streamlit.components.v1 as components
 
-# --- LIVE CLOCK COMPONENT ---
-st.markdown("""
+# --- 1. PAGE CONFIGURATION (MUST BE FIRST) ---
+st.set_page_config(page_title="Vera: Your Personal Health Assistant ⚕️", page_icon="⚕️")
+
+# --- 2. FIXED LIVE CLOCK COMPONENT ---
+# Using components.html guarantees the JavaScript runs and won't get blocked by the browser
+components.html(
+    """
     <div id="clock" style="
         position: fixed; 
-        top: 15px; 
-        right: 20px; 
+        top: 5px; 
+        right: 15px; 
         font-family: sans-serif; 
         font-size: 16px; 
-        color: #333; 
+        color: #2e7d32; 
         font-weight: bold; 
         background: rgba(255, 255, 255, 0.9); 
         padding: 5px 12px; 
         border-radius: 20px; 
+        border: 1px solid #2e7d32;
         box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-        z-index: 9999;">
+        z-index: 999999;
+        text-align: center;
+        width: 100px;
+    ">
         --:--
     </div>
     <script>
@@ -25,23 +34,21 @@ st.markdown("""
             const now = new Date();
             document.getElementById('clock').innerText = now.toLocaleTimeString([], { 
                 hour: '2-digit', 
-                minute: '2-digit' 
+                minute: '2-digit',
+                second: '2-digit'
             });
         }
         setInterval(updateClock, 1000);
         updateClock();
     </script>
-""", unsafe_allow_html=True)
+    """,
+    height=45,
+)
 
-# Example of where your existing logic would continue:
-# if st.button("Check status"):
-#    st.write("Vera is online!")
+# --- 3. APP TITLE ---
+st.title("Vera: Your Personal Health Assistant ⚕️")
 
-# Configure the page
-st.set_page_config(page_title="Vera: Your Personal Health Assistant", page_icon="🩺")
-st.title("Vera: Your Personal Health Assistant")
-
-# Connect to Groq
+# --- 4. CONNECT TO GROQ ---
 if "client" not in st.session_state:
     try:
         st.session_state.client = Groq(api_key=st.secrets["GROQ_API_KEY"])
@@ -49,10 +56,9 @@ if "client" not in st.session_state:
         st.error("API Key missing! Please add GROQ_API_KEY to your Streamlit Secrets.")
         st.stop()
 
-# Initialize History with Vera's Identity
+# --- 5. INITIALIZE HISTORY WITH VERA'S IDENTITY ---
 if "messages" not in st.session_state:
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    # This is the "Origin Story" instruction
     system_instruction = (
         f"You are Vera, a helpful Health Assistant. "
         f"You were created by OmniSync. "
@@ -63,20 +69,20 @@ if "messages" not in st.session_state:
         {"role": "system", "content": system_instruction}
     ]
 
-# Display Messages
+# --- 6. DISPLAY MESSAGES ---
 for message in st.session_state.messages:
     if message["role"] != "system":
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-# Handle User Input
+# --- 7. HANDLE USER INPUT ---
 if prompt := st.chat_input("Ask me about health, wellness, or anything else..."):
-    # 1. Add user message
+    # Add user message
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # 2. Generate Response
+    # Generate Response
     with st.chat_message("assistant"):
         try:
             # Filter the list to ensure only strings are passed
@@ -97,6 +103,6 @@ if prompt := st.chat_input("Ask me about health, wellness, or anything else...")
             if len(st.session_state.messages) > 1:
                 st.session_state.messages.pop()
 
-# Footer Crediting Groq
+# --- 8. FOOTER ---
 st.markdown("---")
 st.caption("Powered by Groq | Developed by OmniSync")
