@@ -2,7 +2,7 @@ import streamlit as st
 from groq import Groq
 import streamlit.components.v1 as components
 from datetime import datetime
-import pypdf # Updated to pypdf
+import pypdf
 
 # --- 1. CONFIGURATION ---
 st.set_page_config(page_title="Vera | Personal AI Health Companion", page_icon="⚕️", layout="wide")
@@ -49,8 +49,13 @@ components.html("""
     </script>
 """, height=150)
 
-# --- 4. DOCUMENT UPLOADER ---
-uploaded_file = st.sidebar.file_uploader("Upload a document for Vera", type=['txt', 'pdf'])
+# --- 4. SIDEBAR SETTINGS ---
+st.sidebar.header("Vera Settings")
+enable_upload = st.sidebar.toggle("Enable File Uploads")
+
+uploaded_file = None
+if enable_upload:
+    uploaded_file = st.sidebar.file_uploader("Upload a document for Vera", type=['txt', 'pdf'])
 
 def process_document(file):
     if file.type == "application/pdf":
@@ -86,6 +91,7 @@ if prompt := st.chat_input("Talk to Vera..."):
         3. Contextual Wellness: Only suggest wellness when context warrants it.
         4. Focus Companion: Support with timers and encouragement.
         5. Micro-Reactions: Use natural, brief emotional cues (e.g., 'Hm.', 'I see.', 'That sounds rough.') before responding.
+        6. Persona: Feel free to use emojis naturally when expressing support, excitement, or empathy.
         
         If the user provided a document, analyze the text and answer questions about it.
         """
