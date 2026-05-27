@@ -1,4 +1,4 @@
-import streamlit as st
+t streamlit as st
 from groq import Groq
 from datetime import datetime
 import streamlit.components.v1 as components
@@ -214,5 +214,4 @@ if prompt:
 
 # --- 9. FOOTER ---
 st.markdown("---")
-st.caption("Powered by Groq | Developed by OmniSync")
-    
+st.caption("Powered by Groq | Developed
