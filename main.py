@@ -109,3 +109,4 @@ if prompt := st.chat_input("Talk to Vera..."):
 # --- 6. BRANDING FOOTER ---
 st.markdown("---")
 st.caption("Developed by **OmniSync** | Powered by **Groq**")
+        
