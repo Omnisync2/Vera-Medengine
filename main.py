@@ -29,6 +29,14 @@ if "doc_text" not in st.session_state:
 if "mood" not in st.session_state:
     st.session_state.mood = "neutral"
 
+if "last_reset" not in st.session_state:
+    st.session_state.last_reset = datetime.now().date()
+
+# Auto daily reset
+if st.session_state.last_reset != datetime.now().date():
+    st.session_state.messages = []
+    st.session_state.last_reset = datetime.now().date()
+
 # ----------------------------
 # 3. VOICE ENGINE
 # ----------------------------
@@ -45,7 +53,7 @@ window.veraSpeak = function(text) {
 """, height=0)
 
 # ----------------------------
-# 4. LIVE CLOCK + STOPWATCH (RESTORED)
+# 4. LIVE CLOCK + STOPWATCH
 # ----------------------------
 components.html("""
 <div style="
@@ -74,138 +82,160 @@ components.html("""
 </div>
 
 <script>
-    setInterval(() => {
-        document.getElementById('clock').innerText =
-            new Date().toLocaleTimeString('en-US', { hour12: false });
-    }, 1000);
+setInterval(() => {
+    document.getElementById('clock').innerText =
+        new Date().toLocaleTimeString('en-US', { hour12: false });
+}, 1000);
 
-    let ms = 0;
-    let running = false;
-    let timer;
+let ms = 0;
+let running = false;
+let timer;
 
-    function update() {
-        let s = Math.floor(ms / 1000) % 60;
-        let m = Math.floor(ms / 60000) % 60;
-        let h = Math.floor(ms / 3600000);
+function update() {
+    let s = Math.floor(ms / 1000) % 60;
+    let m = Math.floor(ms / 60000) % 60;
+    let h = Math.floor(ms / 3600000);
 
-        document.getElementById('stopwatch').innerText =
-            [h, m, s].map(v => v.toString().padStart(2, '0')).join(':');
-    }
+    document.getElementById('stopwatch').innerText =
+        [h, m, s].map(v => v.toString().padStart(2, '0')).join(':');
+}
 
-    function startStop() {
-        if (running) {
-            clearInterval(timer);
-            running = false;
-        } else {
-            timer = setInterval(() => {
-                ms += 1000;
-                update();
-            }, 1000);
-            running = true;
-        }
-    }
-
-    function reset() {
+function startStop() {
+    if (running) {
         clearInterval(timer);
-        ms = 0;
         running = false;
-        update();
+    } else {
+        timer = setInterval(() => {
+            ms += 1000;
+            update();
+        }, 1000);
+        running = true;
     }
+}
 
+function reset() {
+    clearInterval(timer);
+    ms = 0;
+    running = false;
     update();
+}
+
+update();
 </script>
 """, height=200)
 
 # ----------------------------
-# 5. SIDEBAR
+# 5. SIDEBAR (FIXED PDF UPLOAD)
 # ----------------------------
 st.sidebar.title("Vera Control Panel")
 
-enable_upload = st.sidebar.toggle("Enable Document Upload")
 enable_voice = st.sidebar.toggle("Enable Voice Output", value=True)
+
+st.sidebar.markdown("### 📄 Document Upload")
+
+uploaded_file = st.sidebar.file_uploader(
+    "Upload PDF or TXT",
+    type=["pdf", "txt"]
+)
+
+if uploaded_file:
+    st.sidebar.info(f"Loading: {uploaded_file.name}")
+
+    try:
+        if uploaded_file.type == "application/pdf":
+            reader = pypdf.PdfReader(uploaded_file)
+            text = ""
+            for page in reader.pages:
+                text += (page.extract_text() or "") + "\n"
+            st.session_state.doc_text = text.strip()
+        else:
+            st.session_state.doc_text = uploaded_file.getvalue().decode("utf-8")
+
+        st.sidebar.success("Document ready ✔")
+
+    except Exception as e:
+        st.sidebar.error(f"Error: {str(e)}")
 
 if st.sidebar.button("🧹 Reset Chat"):
     st.session_state.messages = []
     st.session_state.doc_text = ""
     st.rerun()
 
-uploaded_file = None
-if enable_upload:
-    uploaded_file = st.sidebar.file_uploader("Upload TXT or PDF", type=["txt", "pdf"])
-
 # ----------------------------
-# 6. DOCUMENT PROCESSOR (SAFE)
+# 6. AI STATE ENGINE
 # ----------------------------
-def process_document(file):
-    try:
-        if file.type == "application/pdf":
-            reader = pypdf.PdfReader(file)
-            text = ""
-            for page in reader.pages:
-                text += (page.extract_text() or "") + "\n"
-            return text.strip()
-        else:
-            return file.getvalue().decode("utf-8")
-    except Exception as e:
-        return f"[Error reading document: {str(e)}]"
-
-if uploaded_file:
-    st.session_state.doc_text = process_document(uploaded_file)
-    st.sidebar.success("Document loaded")
-
-# ----------------------------
-# 7. MOOD DETECTION
-# ----------------------------
-def detect_mood(text):
+def detect_state(text):
     text = text.lower()
-    if any(w in text for w in ["stress", "tired", "overwhelmed", "anxious"]):
+
+    if any(w in text for w in ["stress", "tired", "overwhelmed", "anxious", "burnout"]):
         return "stress"
-    if any(w in text for w in ["happy", "good", "great", "love"]):
+    elif any(w in text for w in ["study", "work", "focus", "task", "homework"]):
+        return "focus"
+    elif any(w in text for w in ["happy", "good", "great", "love", "amazing"]):
         return "positive"
     return "neutral"
 
 # ----------------------------
-# 8. SYSTEM PROMPT
+# 7. SYSTEM PROMPT
 # ----------------------------
 def build_system_prompt():
     base = (
-        "You are Vera, an AI health companion. "
-        "Be calm, helpful, and concise. "
-        "Adapt tone based on user emotional state."
+        "You are Vera, an advanced AI wellness companion. "
+        "You support emotional balance, productivity, and document understanding. "
+        "Respond naturally and concisely."
     )
 
     if st.session_state.mood == "stress":
-        base += " The user seems stressed. Respond gently and supportively."
+        base += " User is stressed. Be calm and supportive."
+
+    if st.session_state.mood == "focus":
+        base += " User is in focus mode. Be structured and direct."
+
+    if st.session_state.mood == "positive":
+        base += " Match the user's positive energy lightly."
 
     if st.session_state.doc_text:
-        base += " A document is available for analysis if needed."
+        base += " A document is available for analysis."
 
     return base
 
 # ----------------------------
-# 9. UI TITLE
+# 8. UI
 # ----------------------------
 st.title("Vera ⚕️ AI Health Companion")
 
+st.markdown(f"""
+### 🧠 Status Panel
+- Mood: `{st.session_state.mood}`
+- Messages: `{len(st.session_state.messages)}`
+- Document: {"Loaded 📄" if st.session_state.doc_text else "None"}
+""")
+
 # ----------------------------
-# 10. CHAT HISTORY
+# 9. CHAT HISTORY
 # ----------------------------
 for msg in st.session_state.messages[-12:]:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
 # ----------------------------
-# 11. CHAT INPUT
+# 10. CHAT INPUT
 # ----------------------------
 if prompt := st.chat_input("Talk to Vera..."):
 
-    st.session_state.mood = detect_mood(prompt)
+    st.session_state.mood = detect_state(prompt)
+
+    if "focus" in prompt.lower():
+        st.session_state.mood = "focus"
+    if "stress" in prompt.lower():
+        st.session_state.mood = "stress"
+
     st.session_state.messages.append({"role": "user", "content": prompt})
 
     extra_context = []
 
     if st.session_state.doc_text:
-        if "document" in prompt.lower() or "this" in prompt.lower():
+        if any(k in prompt.lower() for k in ["document", "summarize", "this", "file"]):
             extra_context.append({
                 "role": "system",
                 "content": f"DOCUMENT:\n{st.session_state.doc_text[:12000]}"
@@ -213,11 +243,7 @@ if prompt := st.chat_input("Talk to Vera..."):
 
     system_prompt = {"role": "system", "content": build_system_prompt()}
 
-    messages = (
-        [system_prompt]
-        + extra_context
-        + st.session_state.messages[-12:]
-    )
+    messages = [system_prompt] + extra_context + st.session_state.messages[-12:]
 
     with st.chat_message("assistant"):
         stream = st.session_state.client.chat.completions.create(
@@ -232,26 +258,20 @@ if prompt := st.chat_input("Talk to Vera..."):
         for chunk in stream:
             if chunk.choices[0].delta.content:
                 full += chunk.choices[0].delta.content
-                box.markdown(full)
+                box.markdown("🧠 Vera is thinking...\n\n" + full)
 
         st.session_state.messages.append({"role": "assistant", "content": full})
 
-        # ----------------------------
-        # VOICE OUTPUT (SAFE)
-        # ----------------------------
         if enable_voice:
             safe_text = json.dumps(full)
-            components.html(
-                f"<script>window.veraSpeak({safe_text});</script>",
-                height=0
-            )
+            components.html(f"<script>window.veraSpeak({safe_text});</script>", height=0)
 
     st.rerun()
 
 # ----------------------------
-# 12. FOOTER
+# 11. FOOTER
 # ----------------------------
 st.markdown("---")
 st.caption(
-    f"• Developed by OmniSync • {datetime.now().strftime('%B %d, %Y')} • Powered by Groq •"
+    f"Vera v3 • OmniSync • {datetime.now().strftime('%B %d, %Y')} • Powered by Groq"
 )
