@@ -253,5 +253,5 @@ if prompt := st.chat_input("Talk to Vera..."):
 # ----------------------------
 st.markdown("---")
 st.caption(
-    f"Vera v2 • Developed by OmniSync • {datetime.now().strftime('%B %d, %Y')} • Powered by Groq"
+    f"• Developed by OmniSync • {datetime.now().strftime('%B %d, %Y')} • Powered by Groq"
 )
